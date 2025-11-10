@@ -9,16 +9,6 @@ fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const any
     return c.SDL_GL_GetProcAddress(symbolName);
 }
 
-const vertShader = [1][]const u8{
-    \\#version 330 core
-    \\layout (location = 0) in vec3 aPos;
-    \\
-    \\void main()
-    \\{
-    \\    gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);
-    \\}
-};
-
 const fragShader = [1][]const u8{
     \\#version 330 core
     \\out vec4 FragColor;
@@ -116,9 +106,20 @@ pub const App = struct {
         mesh.vbo.data(f32, &vertices, .static_draw);
         mesh.ebo.data(u32, &indices, .static_draw);
 
+        const allocator = std.heap.page_allocator;
+
+        // Read file into an allocator-owned buffer (max 10 MiB here).
+        var data = try std.fs.cwd().readFileAlloc(allocator, "shaders/basic.vert", 1024);
+        defer allocator.free(data);
+
         const vertexShader = gl.createShader(.vertex);
-        vertexShader.source(1, &vertShader);
+        vertexShader.source(1, &data);
         vertexShader.compile();
+
+        if (vertexShader.get(.compile_status) == 0) {
+            const err = try vertexShader.getCompileLog(allocator);
+            std.debug.print("{s}", .{err});
+        }
 
         const fragmentShader = gl.createShader(.fragment);
         fragmentShader.source(1, &fragShader);
@@ -173,4 +174,9 @@ const Mesh = struct {
         self.vbo.bind(.array_buffer);
         self.ebo.bind(.element_array_buffer);
     }
+};
+
+const Shader = struct {
+    vertexCode: []u8,
+    fragmentCode: []u8,
 };
