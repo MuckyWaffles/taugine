@@ -36,9 +36,21 @@ pub const App = struct {
 
     context: sdlgl.Context,
 
+    appStart: *const fn () void,
+    appProcess: *const fn () void,
+
     /// Initialize app
-    pub fn init(title: []const u8, width: u16, height: u16) App {
+    pub fn init(
+        title: []const u8,
+        width: u16,
+        height: u16,
+        appStart: *const fn () void,
+        appProcess: *const fn () void,
+    ) App {
         return App{
+            .appStart = appStart,
+            .appProcess = appProcess,
+
             .title = title,
             .screenWidth = width,
             .screenHeight = height,
@@ -86,21 +98,23 @@ pub const App = struct {
 
         //_ = gl.enable(gl.Capabilities.multisample);
 
-        var vertices = [9]f32{
-            -0.5, -0.5, 0.0,
-            0.0,  0.5,  0.0,
-            0.5,  -0.5, 0.0,
+        self.appStart();
+        const vertices = [12]f32{
+            0.5, 0.5, 0.0, // top right
+            0.5, -0.5, 0.0, // bottom right
+            -0.5, -0.5, 0.0, // bottom left
+            -0.5, 0.5, 0.0, // top left
         };
-        var vao = gl.genVertexArray();
-        vao.bind();
+        const indices = [6]u32{
+            0, 1, 3,
+            1, 2, 3,
+        };
 
-        var vbo = gl.genBuffer();
-        vbo.bind(gl.BufferTarget.array_buffer);
-        vbo.data(
-            f32,
-            &vertices,
-            .static_draw,
-        );
+        var mesh = Mesh.init();
+        mesh.bind();
+
+        mesh.vbo.data(f32, &vertices, .static_draw);
+        mesh.ebo.data(u32, &indices, .static_draw);
 
         const vertexShader = gl.createShader(.vertex);
         vertexShader.source(1, &vertShader);
@@ -125,8 +139,9 @@ pub const App = struct {
         var exitRequested = false;
         while (!exitRequested) {
             // Update logic.
+            self.appProcess();
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
-            gl.drawArrays(.triangles, 0, 3);
+            gl.drawElements(.triangles, 6, .unsigned_int, 0);
             try sdlgl.swapWindow(window);
 
             // Event logic.
@@ -138,5 +153,24 @@ pub const App = struct {
                 }
             }
         }
+    }
+};
+
+const Mesh = struct {
+    vao: gl.VertexArray,
+    vbo: gl.Buffer,
+    ebo: gl.Buffer,
+
+    pub fn init() Mesh {
+        return Mesh{
+            .vao = gl.genVertexArray(),
+            .vbo = gl.genBuffer(),
+            .ebo = gl.genBuffer(),
+        };
+    }
+    pub fn bind(self: *Mesh) void {
+        self.vao.bind();
+        self.vbo.bind(.array_buffer);
+        self.ebo.bind(.element_array_buffer);
     }
 };
