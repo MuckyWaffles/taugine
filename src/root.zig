@@ -99,7 +99,8 @@ pub const App = struct {
         const allocator = std.heap.page_allocator;
         const cubeData = try std.fs.cwd().readFileAlloc(allocator, "cube.obj", 2048);
         var cube = try obj.parseObj(allocator, cubeData);
-        var indices: [36]u32 = undefined;
+        var indices: [24]u32 = undefined;
+        std.debug.print("{d}", .{cube.meshes[0].indices.len});
         for (indices, 0..) |_, i| {
             indices[i] = cube.meshes[0].indices[i].vertex.?;
         }
@@ -153,7 +154,7 @@ pub const App = struct {
                 false,
                 @ptrCast(&model.vals),
             );
-            gl.drawElements(.triangles, indices.len, .unsigned_int, 0);
+            gl.drawElements(.triangle_strip, indices.len, .unsigned_int, 0);
             //gl.drawArrays(.triangles, 0, 36);
 
             try sdlgl.swapWindow(self.window);
