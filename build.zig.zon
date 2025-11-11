@@ -40,6 +40,10 @@
             .url = "https://github.com/ziglibs/zgl/archive/caf811fb8b778184128772e57dfcb96be2351c43.tar.gz",
             .hash = "zgl-1.1.0-p_NpAJJECgDSDHYHH_W6rX0snxnFoJ4JZZ0FV5_vqjjy",
         },
+        .obj = .{
+            .url = "git+https://github.com/chip2n/zig-obj.git#47410383c81d24454e370ffadc0980af7abea522",
+            .hash = "obj-3.0.2-v8OfitvLAADxUf6oMHCiWxjJILklY-IMKXlwX-Pv8rKu",
+        },
     },
     .paths = .{
         "build.zig",

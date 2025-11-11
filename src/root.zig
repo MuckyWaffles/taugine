@@ -5,6 +5,8 @@ const gl = @import("zgl");
 const sdlgl = sdl.video.gl;
 const c = sdl.c;
 
+const obj = @import("obj");
+
 const glm = @import("glm.zig");
 
 fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const anyopaque {
@@ -18,6 +20,7 @@ pub const App = struct {
 
     initFlags: sdl.InitFlags,
     context: sdlgl.Context,
+    window: sdl.video.Window,
 
     appStart: *const fn () void,
     appProcess: *const fn () void,
@@ -29,7 +32,7 @@ pub const App = struct {
         height: u16,
         appStart: *const fn () void,
         appProcess: *const fn () void,
-    ) App {
+    ) !App {
         // Init SDL3
         const initFlags = sdl.InitFlags{ .video = true };
         sdl.init(initFlags) catch |err| {
@@ -46,11 +49,28 @@ pub const App = struct {
 
         // Enabling anti-aliasing
         sdlgl.setAttribute(.multi_sample_buffers, 1) catch |err| {
-            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+            std.debug.print("Failed to set OpenGL attribute! {}\n", .{err});
         };
         sdlgl.setAttribute(.multi_sample_samples, 4) catch |err| {
-            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+            std.debug.print("Failed to set OpenGL attribute! {}\n", .{err});
         };
+
+        // Setup window
+        const windowFlags = sdl.video.Window.Flags{ .open_gl = true };
+        const window = try sdl.video.Window.init(
+            @ptrCast(title),
+            width,
+            height,
+            windowFlags,
+        );
+
+        // Init OpenGL context
+        const context = try sdlgl.Context.init(window);
+        try context.makeCurrent(window);
+
+        try gl.loadExtensions(void, getProcAddressWrapper);
+
+        gl.enable(.multisample);
 
         return App{
             .appStart = appStart,
@@ -60,85 +80,35 @@ pub const App = struct {
             .screenWidth = width,
             .screenHeight = height,
             .initFlags = initFlags,
-            .context = undefined,
+            .context = context,
+            .window = window,
         };
     }
     pub fn deinit(self: *App) void {
         self.context.deinit() catch |err| {
             std.debug.print("Error destroying OpenGL context! {}\n", .{err});
         };
+        self.window.deinit();
         sdl.quit(self.initFlags);
         sdl.shutdown();
     }
 
     pub fn run(self: *App) !void {
-        // Setup window
-        const windowFlags = sdl.video.Window.Flags{ .open_gl = true };
-        const window = try sdl.video.Window.init(
-            @ptrCast(self.title),
-            self.screenWidth,
-            self.screenHeight,
-            windowFlags,
-        );
-        defer window.deinit();
-
-        self.context = try sdlgl.Context.init(window);
-        try self.context.makeCurrent(window);
-
-        try gl.loadExtensions(void, getProcAddressWrapper);
-
-        gl.enable(.multisample);
-
         self.appStart();
-        const vertices = [_]f32{
-            -0.5, -0.5, -0.5,
-            0.5,  -0.5, -0.5,
-            0.5,  0.5,  -0.5,
-            0.5,  0.5,  -0.5,
-            -0.5, 0.5,  -0.5,
-            -0.5, -0.5, -0.5,
 
-            -0.5, -0.5, 0.5,
-            0.5,  -0.5, 0.5,
-            0.5,  0.5,  0.5,
-            0.5,  0.5,  0.5,
-            -0.5, 0.5,  0.5,
-            -0.5, -0.5, 0.5,
-
-            -0.5, 0.5,  0.5,
-            -0.5, 0.5,  -0.5,
-            -0.5, -0.5, -0.5,
-            -0.5, -0.5, -0.5,
-            -0.5, -0.5, 0.5,
-            -0.5, 0.5,  0.5,
-
-            0.5,  0.5,  0.5,
-            0.5,  0.5,  -0.5,
-            0.5,  -0.5, -0.5,
-            0.5,  -0.5, -0.5,
-            0.5,  -0.5, 0.5,
-            0.5,  0.5,  0.5,
-
-            -0.5, -0.5, -0.5,
-            0.5,  -0.5, -0.5,
-            0.5,  -0.5, 0.5,
-            0.5,  -0.5, 0.5,
-            -0.5, -0.5, 0.5,
-            -0.5, -0.5, -0.5,
-
-            -0.5, 0.5,  -0.5,
-            0.5,  0.5,  -0.5,
-            0.5,  0.5,  0.5,
-            0.5,  0.5,  0.5,
-            -0.5, 0.5,  0.5,
-            -0.5, 0.5,  -0.5,
-        };
-        const indices = [6]u32{ 0, 1, 3, 1, 2, 3 };
+        const allocator = std.heap.page_allocator;
+        const cubeData = try std.fs.cwd().readFileAlloc(allocator, "cube.obj", 2048);
+        var cube = try obj.parseObj(allocator, cubeData);
+        var indices: [36]u32 = undefined;
+        for (indices, 0..) |_, i| {
+            indices[i] = cube.meshes[0].indices[i].vertex.?;
+        }
+        defer cube.deinit(allocator);
 
         var mesh = Mesh.init();
         mesh.bind();
 
-        mesh.vbo.data(f32, &vertices, .static_draw);
+        mesh.vbo.data(f32, cube.vertices, .static_draw);
         mesh.ebo.data(u32, &indices, .static_draw);
 
         gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
@@ -183,10 +153,10 @@ pub const App = struct {
                 false,
                 @ptrCast(&model.vals),
             );
-            //gl.drawElements(.triangles, 6, .unsigned_int, 0);
-            gl.drawArrays(.triangles, 0, 36);
+            gl.drawElements(.triangles, indices.len, .unsigned_int, 0);
+            //gl.drawArrays(.triangles, 0, 36);
 
-            try sdlgl.swapWindow(window);
+            try sdlgl.swapWindow(self.window);
 
             // Event logic.
             while (sdl.events.poll()) |event| {

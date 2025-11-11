@@ -5,7 +5,7 @@ fn appStart() void {}
 fn appProcess() void {}
 
 pub fn main() !void {
-    var app = taugine.App.init(
+    var app = try taugine.App.init(
         "Taugine",
         800,
         600,
