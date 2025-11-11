@@ -5,25 +5,18 @@ const gl = @import("zgl");
 const sdlgl = sdl.video.gl;
 const c = sdl.c;
 
+const glm = @import("glm.zig");
+
 fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const anyopaque {
     return c.SDL_GL_GetProcAddress(symbolName);
 }
-
-const fragShader = [1][]const u8{
-    \\#version 330 core
-    \\out vec4 FragColor;
-    \\
-    \\void main()
-    \\{
-    \\    FragColor = vec4(1.0f, 0.5f, 0.2f, 1.0f);
-    \\}
-};
 
 pub const App = struct {
     title: []const u8,
     screenWidth: u16,
     screenHeight: u16,
 
+    initFlags: sdl.InitFlags,
     context: sdlgl.Context,
 
     appStart: *const fn () void,
@@ -37,6 +30,28 @@ pub const App = struct {
         appStart: *const fn () void,
         appProcess: *const fn () void,
     ) App {
+        // Init SDL3
+        const initFlags = sdl.InitFlags{ .video = true };
+        sdl.init(initFlags) catch |err| {
+            std.debug.print("Failed to initialize SDL3! {}\n", .{err});
+        };
+
+        // Setting OpenGL attributes
+        sdlgl.setAttribute(
+            .context_profile_mask,
+            c.SDL_GL_CONTEXT_PROFILE_CORE,
+        ) catch |err| {
+            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+        };
+
+        // Enabling anti-aliasing
+        sdlgl.setAttribute(.multi_sample_buffers, 1) catch |err| {
+            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+        };
+        sdlgl.setAttribute(.multi_sample_samples, 4) catch |err| {
+            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+        };
+
         return App{
             .appStart = appStart,
             .appProcess = appProcess,
@@ -44,34 +59,20 @@ pub const App = struct {
             .title = title,
             .screenWidth = width,
             .screenHeight = height,
+            .initFlags = initFlags,
             .context = undefined,
         };
     }
     pub fn deinit(self: *App) void {
         self.context.deinit() catch |err| {
-            std.debug.print("Error destroying OpenGL context! {}", .{err});
+            std.debug.print("Error destroying OpenGL context! {}\n", .{err});
         };
+        sdl.quit(self.initFlags);
+        sdl.shutdown();
     }
 
     pub fn run(self: *App) !void {
-        defer sdl.shutdown();
-
-        // Init SDL3
-        const initFlags = sdl.InitFlags{ .video = true };
-        try sdl.init(initFlags);
-        defer sdl.quit(initFlags);
-
-        // TODO: As you can see, I have some strange mix of wrapped and unwrapped sdl here
         // Setup window
-        try sdlgl.setAttribute(
-            .context_profile_mask,
-            c.SDL_GL_CONTEXT_PROFILE_CORE,
-        );
-
-        // Enabling anti-aliasing
-        _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLEBUFFERS, 1);
-        _ = c.SDL_GL_SetAttribute(c.SDL_GL_MULTISAMPLESAMPLES, 4);
-
         const windowFlags = sdl.video.Window.Flags{ .open_gl = true };
         const window = try sdl.video.Window.init(
             @ptrCast(self.title),
@@ -86,19 +87,53 @@ pub const App = struct {
 
         try gl.loadExtensions(void, getProcAddressWrapper);
 
-        //_ = gl.enable(gl.Capabilities.multisample);
+        gl.enable(.multisample);
 
         self.appStart();
-        const vertices = [12]f32{
-            0.5, 0.5, 0.0, // top right
-            0.5, -0.5, 0.0, // bottom right
-            -0.5, -0.5, 0.0, // bottom left
-            -0.5, 0.5, 0.0, // top left
+        const vertices = [_]f32{
+            -0.5, -0.5, -0.5,
+            0.5,  -0.5, -0.5,
+            0.5,  0.5,  -0.5,
+            0.5,  0.5,  -0.5,
+            -0.5, 0.5,  -0.5,
+            -0.5, -0.5, -0.5,
+
+            -0.5, -0.5, 0.5,
+            0.5,  -0.5, 0.5,
+            0.5,  0.5,  0.5,
+            0.5,  0.5,  0.5,
+            -0.5, 0.5,  0.5,
+            -0.5, -0.5, 0.5,
+
+            -0.5, 0.5,  0.5,
+            -0.5, 0.5,  -0.5,
+            -0.5, -0.5, -0.5,
+            -0.5, -0.5, -0.5,
+            -0.5, -0.5, 0.5,
+            -0.5, 0.5,  0.5,
+
+            0.5,  0.5,  0.5,
+            0.5,  0.5,  -0.5,
+            0.5,  -0.5, -0.5,
+            0.5,  -0.5, -0.5,
+            0.5,  -0.5, 0.5,
+            0.5,  0.5,  0.5,
+
+            -0.5, -0.5, -0.5,
+            0.5,  -0.5, -0.5,
+            0.5,  -0.5, 0.5,
+            0.5,  -0.5, 0.5,
+            -0.5, -0.5, 0.5,
+            -0.5, -0.5, -0.5,
+
+            -0.5, 0.5,  -0.5,
+            0.5,  0.5,  -0.5,
+            0.5,  0.5,  0.5,
+            0.5,  0.5,  0.5,
+            -0.5, 0.5,  0.5,
+            -0.5, 0.5,  -0.5,
         };
-        const indices = [6]u32{
-            0, 1, 3,
-            1, 2, 3,
-        };
+        const indices = [6]u32{ 0, 1, 3, 1, 2, 3 };
 
         var mesh = Mesh.init();
         mesh.bind();
@@ -106,43 +141,51 @@ pub const App = struct {
         mesh.vbo.data(f32, &vertices, .static_draw);
         mesh.ebo.data(u32, &indices, .static_draw);
 
-        const allocator = std.heap.page_allocator;
-
-        // Read file into an allocator-owned buffer (max 10 MiB here).
-        var data = try std.fs.cwd().readFileAlloc(allocator, "shaders/basic.vert", 1024);
-        defer allocator.free(data);
-
-        const vertexShader = gl.createShader(.vertex);
-        vertexShader.source(1, &data);
-        vertexShader.compile();
-
-        if (vertexShader.get(.compile_status) == 0) {
-            const err = try vertexShader.getCompileLog(allocator);
-            std.debug.print("{s}", .{err});
-        }
-
-        const fragmentShader = gl.createShader(.fragment);
-        fragmentShader.source(1, &fragShader);
-        fragmentShader.compile();
-
-        const shaderProgram = gl.createProgram();
-        shaderProgram.attach(vertexShader);
-        shaderProgram.attach(fragmentShader);
-        shaderProgram.link();
-        shaderProgram.use();
-
-        vertexShader.delete();
-        fragmentShader.delete();
-
         gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
         gl.enableVertexAttribArray(0);
+
+        // const program = try compileProgram("shaders/basic.vert", "shaders/basic.frag");
+        // program.use();
+
+        const program = try compileProgram("shaders/object.vert", "shaders/basic.frag");
+        program.use();
+
+        const view = glm.translation(glm.vec3(0.0, 0.0, -3.0));
+        const projection = glm.perspective(
+            45.0 / 180.0 * 3.141,
+            @as(f32, @floatFromInt(self.screenWidth)) / @as(f32, @floatFromInt(self.screenHeight)),
+            0.1,
+            100.0,
+        );
+        program.uniformMatrix4(
+            program.uniformLocation("projection"),
+            false,
+            @ptrCast(&projection.vals),
+        );
+        program.uniformMatrix4(
+            program.uniformLocation("view"),
+            false,
+            @ptrCast(&view.vals),
+        );
 
         var exitRequested = false;
         while (!exitRequested) {
             // Update logic.
             self.appProcess();
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
-            gl.drawElements(.triangles, 6, .unsigned_int, 0);
+            gl.clear(.{});
+
+            var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
+            const angle = 20.0;
+            model = model.matmul(glm.rotation(angle / 180.0 * 3.141, glm.vec3(1.0, 0.3, 0.5)));
+            program.uniformMatrix4(
+                program.uniformLocation("model"),
+                false,
+                @ptrCast(&model.vals),
+            );
+            //gl.drawElements(.triangles, 6, .unsigned_int, 0);
+            gl.drawArrays(.triangles, 0, 36);
+
             try sdlgl.swapWindow(window);
 
             // Event logic.
@@ -176,7 +219,37 @@ const Mesh = struct {
     }
 };
 
-const Shader = struct {
-    vertexCode: []u8,
-    fragmentCode: []u8,
-};
+pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
+    const allocator = std.heap.page_allocator;
+
+    var vertCode = try std.fs.cwd().readFileAlloc(allocator, vertPath, 1024);
+    defer allocator.free(vertCode);
+
+    const vertexShader = gl.createShader(.vertex);
+    vertexShader.source(1, &vertCode);
+    vertexShader.compile();
+    if (vertexShader.get(.compile_status) == 0) {
+        const err = try vertexShader.getCompileLog(allocator);
+        std.debug.print("{s}\n", .{err});
+    }
+    defer vertexShader.delete();
+
+    var fragCode = try std.fs.cwd().readFileAlloc(allocator, fragPath, 1024);
+    defer allocator.free(fragCode);
+
+    const fragmentShader = gl.createShader(.fragment);
+    fragmentShader.source(1, &fragCode);
+    fragmentShader.compile();
+    if (fragmentShader.get(.compile_status) == 0) {
+        const err = try vertexShader.getCompileLog(allocator);
+        std.debug.print("{s}\n", .{err});
+    }
+    defer fragmentShader.delete();
+
+    const shaderProgram = gl.createProgram();
+    shaderProgram.attach(vertexShader);
+    shaderProgram.attach(fragmentShader);
+    shaderProgram.link();
+
+    return shaderProgram;
+}
