@@ -1,5 +1,6 @@
 const std = @import("std");
 const tg = @import("taugine");
+const pi = std.math.pi;
 
 var mesh: tg.Mesh = undefined;
 var program: tg.gl.Program = undefined;
@@ -25,28 +26,43 @@ fn appStart() void {
 
 const glm = tg.glm;
 var camPos = glm.vec3(0.0, 0.0, 3.0);
-var camTarget = glm.vec3(0.0, 0.0, 0.0);
+var camFront = glm.vec3(0.0, 0.0, -1.0);
+
+var yaw: f32 = -0.5;
+var pitch: f32 = 0.0;
 
 fn appProcess() void {
+    const camSpeed = 0.1;
+    const up = glm.vec3(0.0, 1.0, 0.0);
     if (tg.Input.moveForwards) {
-        camPos = camPos.add(glm.vec3(0.0, 0.0, -0.1));
-        camTarget = camTarget.add(glm.vec3(0.0, 0.0, -0.1));
+        camPos = camPos.add(camFront.mulScalar(camSpeed));
     }
     if (tg.Input.moveBackwards) {
-        camPos = camPos.add(glm.vec3(0.0, 0.0, 0.1));
-        camTarget = camTarget.add(glm.vec3(0.0, 0.0, 0.1));
+        camPos = camPos.sub(camFront.mulScalar(camSpeed));
     }
     if (tg.Input.moveLeft) {
-        camPos = camPos.add(glm.vec3(-0.1, 0.0, 0.0));
-        camTarget = camTarget.add(glm.vec3(-0.1, 0.0, 0.0));
+        const move = camFront.cross(up).normalize();
+        camPos = camPos.sub(move.mulScalar(camSpeed));
     }
     if (tg.Input.moveRight) {
-        camPos = camPos.add(glm.vec3(0.1, 0.0, 0.0));
-        camTarget = camTarget.add(glm.vec3(0.1, 0.0, 0.0));
+        const move = camFront.cross(up).normalize();
+        camPos = camPos.add(move.mulScalar(camSpeed));
+    }
+    if (tg.Input.lookLeft) {
+        yaw -= 0.01;
+    }
+    if (tg.Input.lookRight) {
+        yaw += 0.01;
     }
 
-    const up = glm.vec3(0.0, 1.0, 0.0);
-    const view = glm.lookAt(camPos, camTarget, up);
+    const direction = glm.vec3(
+        std.math.cos(yaw * pi) * std.math.cos(pitch * pi),
+        std.math.sin(pitch * pi),
+        std.math.sin(yaw * pi) * std.math.cos(pitch * pi),
+    );
+    camFront = direction.normalize();
+
+    const view = glm.lookAt(camPos, camPos.add(camFront), up);
 
     program.uniformMatrix4(
         program.uniformLocation("view"),

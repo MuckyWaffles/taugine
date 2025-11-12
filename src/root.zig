@@ -123,6 +123,8 @@ pub const Input = struct {
     pub var moveBackwards: bool = false;
     pub var moveLeft: bool = false;
     pub var moveRight: bool = false;
+    pub var lookLeft: bool = false;
+    pub var lookRight: bool = false;
 
     // Event logic.
     fn get() void {
@@ -135,6 +137,8 @@ pub const Input = struct {
                     .s => Input.moveBackwards = true,
                     .a => Input.moveLeft = true,
                     .d => Input.moveRight = true,
+                    .left => Input.lookLeft = true,
+                    .right => Input.lookRight = true,
                     else => {},
                 },
                 .key_up => switch (event.key_up.scancode.?) {
@@ -142,6 +146,8 @@ pub const Input = struct {
                     .s => Input.moveBackwards = false,
                     .a => Input.moveLeft = false,
                     .d => Input.moveRight = false,
+                    .left => Input.lookLeft = false,
+                    .right => Input.lookRight = false,
                     else => {},
                 },
                 else => {},
@@ -167,7 +173,6 @@ pub const Mesh = struct {
         // num_vertices gives the amount of faces, multiply by the
         // 6 indices we need per face
         const indexCount = data.meshes[0].num_vertices.len * 6;
-        std.debug.print("{d}\n", .{data.meshes[0].indices.len});
         var indices = try allocator.alloc(u32, indexCount);
 
         var processed: u32 = 0;
