@@ -1,13 +1,15 @@
 //! By convention, root.zig is the root source file when making a library.
 const std = @import("std");
 const sdl = @import("sdl3");
-const gl = @import("zgl");
+
+pub const gl = @import("zgl");
+
 const sdlgl = sdl.video.gl;
 const c = sdl.c;
 
 const obj = @import("obj");
 
-const glm = @import("glm.zig");
+pub const glm = @import("glm.zig");
 
 fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const anyopaque {
     return c.SDL_GL_GetProcAddress(symbolName);
@@ -93,69 +95,18 @@ pub const App = struct {
         sdl.shutdown();
     }
 
+    /// Run given appStart and appProcess in a handled loop
     pub fn run(self: *App) !void {
         self.appStart();
-
-        const allocator = std.heap.page_allocator;
-        const cubeData = try std.fs.cwd().readFileAlloc(allocator, "cube.obj", 2048);
-        var cube = try obj.parseObj(allocator, cubeData);
-        var indices: [24]u32 = undefined;
-        std.debug.print("{d}", .{cube.meshes[0].indices.len});
-        for (indices, 0..) |_, i| {
-            indices[i] = cube.meshes[0].indices[i].vertex.?;
-        }
-        defer cube.deinit(allocator);
-
-        var mesh = Mesh.init();
-        mesh.bind();
-
-        mesh.vbo.data(f32, cube.vertices, .static_draw);
-        mesh.ebo.data(u32, &indices, .static_draw);
-
-        gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
-        gl.enableVertexAttribArray(0);
-
-        // const program = try compileProgram("shaders/basic.vert", "shaders/basic.frag");
-        // program.use();
-
-        const program = try compileProgram("shaders/object.vert", "shaders/basic.frag");
-        program.use();
-
-        const view = glm.translation(glm.vec3(0.0, 0.0, -3.0));
-        const projection = glm.perspective(
-            45.0 / 180.0 * 3.141,
-            @as(f32, @floatFromInt(self.screenWidth)) / @as(f32, @floatFromInt(self.screenHeight)),
-            0.1,
-            100.0,
-        );
-        program.uniformMatrix4(
-            program.uniformLocation("projection"),
-            false,
-            @ptrCast(&projection.vals),
-        );
-        program.uniformMatrix4(
-            program.uniformLocation("view"),
-            false,
-            @ptrCast(&view.vals),
-        );
 
         var exitRequested = false;
         while (!exitRequested) {
             // Update logic.
-            self.appProcess();
-            gl.clearColor(0.8, 0.2, 0.6, 1.0);
-            gl.clear(.{});
 
-            var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
-            const angle = 20.0;
-            model = model.matmul(glm.rotation(angle / 180.0 * 3.141, glm.vec3(1.0, 0.3, 0.5)));
-            program.uniformMatrix4(
-                program.uniformLocation("model"),
-                false,
-                @ptrCast(&model.vals),
-            );
-            gl.drawElements(.triangle_strip, indices.len, .unsigned_int, 0);
-            //gl.drawArrays(.triangles, 0, 36);
+            gl.clearColor(0.8, 0.2, 0.6, 1.0);
+            gl.clear(.{ .depth = true, .color = true });
+
+            self.appProcess();
 
             try sdlgl.swapWindow(self.window);
 
@@ -164,6 +115,34 @@ pub const App = struct {
                 switch (event) {
                     .quit => exitRequested = true,
                     .terminating => exitRequested = true,
+                    .key_down => {
+                        if (event.key_down.scancode.? == .w) {
+                            Input.moveForwards = true;
+                        }
+                        if (event.key_down.scancode.? == .s) {
+                            Input.moveBackwards = true;
+                        }
+                        if (event.key_down.scancode.? == .a) {
+                            Input.moveLeft = true;
+                        }
+                        if (event.key_down.scancode.? == .d) {
+                            Input.moveRight = true;
+                        }
+                    },
+                    .key_up => {
+                        if (event.key_up.scancode.? == .w) {
+                            Input.moveForwards = false;
+                        }
+                        if (event.key_up.scancode.? == .s) {
+                            Input.moveBackwards = false;
+                        }
+                        if (event.key_up.scancode.? == .a) {
+                            Input.moveLeft = false;
+                        }
+                        if (event.key_up.scancode.? == .d) {
+                            Input.moveRight = false;
+                        }
+                    },
                     else => {},
                 }
             }
@@ -171,17 +150,54 @@ pub const App = struct {
     }
 };
 
-const Mesh = struct {
+pub const Input = struct {
+    pub var moveForwards: bool = false;
+    pub var moveBackwards: bool = false;
+    pub var moveLeft: bool = false;
+    pub var moveRight: bool = false;
+};
+
+pub const Mesh = struct {
     vao: gl.VertexArray,
     vbo: gl.Buffer,
     ebo: gl.Buffer,
 
-    pub fn init() Mesh {
-        return Mesh{
+    data: obj.ObjData,
+    indices: []u32,
+    indexCount: u32,
+
+    pub fn init(path: []const u8) !Mesh {
+        const allocator = std.heap.page_allocator;
+        const cubeData = try std.fs.cwd().readFileAlloc(allocator, path, 2048);
+        const data = try obj.parseObj(allocator, cubeData);
+
+        const indexCount = data.meshes[0].indices.len;
+        var indices = try allocator.alloc(u32, indexCount);
+        for (0..indexCount) |i| {
+            indices[i] = data.meshes[0].indices[i].vertex.?;
+        }
+        var mesh = Mesh{
             .vao = gl.genVertexArray(),
             .vbo = gl.genBuffer(),
             .ebo = gl.genBuffer(),
+
+            .data = data,
+            .indices = indices,
+            .indexCount = @intCast(data.meshes[0].indices.len),
         };
+        mesh.bind();
+
+        mesh.vbo.data(f32, mesh.data.vertices, .static_draw);
+        mesh.ebo.data(u32, mesh.indices, .static_draw);
+
+        gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
+        gl.enableVertexAttribArray(0);
+
+        return mesh;
+    }
+    pub fn deinit(self: *Mesh) void {
+        const allocator = std.heap.page_allocator;
+        self.data.deinit(allocator);
     }
     pub fn bind(self: *Mesh) void {
         self.vao.bind();
