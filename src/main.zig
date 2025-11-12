@@ -62,7 +62,7 @@ fn appProcess() void {
         false,
         @ptrCast(&model.vals),
     );
-    tg.gl.drawElements(.triangle_strip, mesh.indices.len, .unsigned_int, 0);
+    tg.gl.drawElements(.triangles, mesh.indices.len, .unsigned_int, 0);
 }
 
 var app: tg.App = undefined;

@@ -73,6 +73,9 @@ pub const App = struct {
         try gl.loadExtensions(void, getProcAddressWrapper);
 
         gl.enable(.multisample);
+        gl.frontFace(.ccw);
+        gl.enable(.cull_face);
+        gl.cullFace(.back);
 
         return App{
             .appStart = appStart,
@@ -99,8 +102,7 @@ pub const App = struct {
     pub fn run(self: *App) !void {
         self.appStart();
 
-        var exitRequested = false;
-        while (!exitRequested) {
+        while (!Input.exitRequested) {
             // Update logic.
 
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
@@ -110,51 +112,42 @@ pub const App = struct {
 
             try sdlgl.swapWindow(self.window);
 
-            // Event logic.
-            while (sdl.events.poll()) |event| {
-                switch (event) {
-                    .quit => exitRequested = true,
-                    .terminating => exitRequested = true,
-                    .key_down => {
-                        if (event.key_down.scancode.? == .w) {
-                            Input.moveForwards = true;
-                        }
-                        if (event.key_down.scancode.? == .s) {
-                            Input.moveBackwards = true;
-                        }
-                        if (event.key_down.scancode.? == .a) {
-                            Input.moveLeft = true;
-                        }
-                        if (event.key_down.scancode.? == .d) {
-                            Input.moveRight = true;
-                        }
-                    },
-                    .key_up => {
-                        if (event.key_up.scancode.? == .w) {
-                            Input.moveForwards = false;
-                        }
-                        if (event.key_up.scancode.? == .s) {
-                            Input.moveBackwards = false;
-                        }
-                        if (event.key_up.scancode.? == .a) {
-                            Input.moveLeft = false;
-                        }
-                        if (event.key_up.scancode.? == .d) {
-                            Input.moveRight = false;
-                        }
-                    },
-                    else => {},
-                }
-            }
+            Input.get(); // Updating inputs
         }
     }
 };
 
 pub const Input = struct {
+    pub var exitRequested: bool = false;
     pub var moveForwards: bool = false;
     pub var moveBackwards: bool = false;
     pub var moveLeft: bool = false;
     pub var moveRight: bool = false;
+
+    // Event logic.
+    fn get() void {
+        while (sdl.events.poll()) |event| {
+            switch (event) {
+                .quit => Input.exitRequested = true,
+                .terminating => Input.exitRequested = true,
+                .key_down => switch (event.key_down.scancode.?) {
+                    .w => Input.moveForwards = true,
+                    .s => Input.moveBackwards = true,
+                    .a => Input.moveLeft = true,
+                    .d => Input.moveRight = true,
+                    else => {},
+                },
+                .key_up => switch (event.key_up.scancode.?) {
+                    .w => Input.moveForwards = false,
+                    .s => Input.moveBackwards = false,
+                    .a => Input.moveLeft = false,
+                    .d => Input.moveRight = false,
+                    else => {},
+                },
+                else => {},
+            }
+        }
+    }
 };
 
 pub const Mesh = struct {
@@ -171,11 +164,32 @@ pub const Mesh = struct {
         const cubeData = try std.fs.cwd().readFileAlloc(allocator, path, 2048);
         const data = try obj.parseObj(allocator, cubeData);
 
-        const indexCount = data.meshes[0].indices.len;
+        // num_vertices gives the amount of faces, multiply by the
+        // 6 indices we need per face
+        const indexCount = data.meshes[0].num_vertices.len * 6;
+        std.debug.print("{d}\n", .{data.meshes[0].indices.len});
         var indices = try allocator.alloc(u32, indexCount);
-        for (0..indexCount) |i| {
-            indices[i] = data.meshes[0].indices[i].vertex.?;
+
+        var processed: u32 = 0;
+
+        // For some reason the indices are done as quads,
+        // so we need to convert them to triangles
+        for (0..6) |i| {
+            const quad = [_]u32{
+                data.meshes[0].indices[processed].vertex.?,
+                data.meshes[0].indices[processed + 1].vertex.?,
+                data.meshes[0].indices[processed + 2].vertex.?,
+                data.meshes[0].indices[processed + 3].vertex.?,
+            };
+            indices[i * 6] = quad[0];
+            indices[i * 6 + 1] = quad[1];
+            indices[i * 6 + 2] = quad[2];
+            indices[i * 6 + 3] = quad[0];
+            indices[i * 6 + 4] = quad[2];
+            indices[i * 6 + 5] = quad[3];
+            processed += 4;
         }
+
         var mesh = Mesh{
             .vao = gl.genVertexArray(),
             .vbo = gl.genBuffer(),
