@@ -25,7 +25,7 @@
     .fingerprint = 0x508074ed67f92709, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.15.2",
+    .minimum_zig_version = "0.16.0-dev.1657+985a3565c",
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .sdl3 = .{
-            .url = "git+https://github.com/Gota7/zig-sdl3?ref=master#014b7bcb2899f3ed9c945c4abfcfe1b25d75bfeb",
-            .hash = "sdl3-0.1.5-NmT1QxARJgAH1Wp0cMBJDAc9vD7weufTkIwVa5rehA2q",
+            .url = "git+https://github.com/Gota7/zig-sdl3?ref=master#79b0d1f1ef10a424037025f6af44fe06bf7e062c",
+            .hash = "sdl3-0.1.5-NmT1Q3ARJgDmFWtbbK3KBb7vufbQD0EjD4Me4Fbdq0p3",
         },
         .zgl = .{
             .url = "https://github.com/ziglibs/zgl/archive/caf811fb8b778184128772e57dfcb96be2351c43.tar.gz",

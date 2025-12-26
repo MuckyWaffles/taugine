@@ -73,6 +73,7 @@ pub const App = struct {
         try gl.loadExtensions(void, getProcAddressWrapper);
 
         gl.enable(.multisample);
+        gl.enable(.depth_test);
         gl.frontFace(.ccw);
         gl.enable(.cull_face);
         gl.cullFace(.back);
@@ -156,18 +157,25 @@ pub const Input = struct {
     }
 };
 
+// pub const Vertex = struct {
+// pos: glm.Vec3,
+// norm: glm.Vec3,
+// tex: glm.Vec3,
+// };
+
 pub const Mesh = struct {
     vao: gl.VertexArray,
     vbo: gl.Buffer,
     ebo: gl.Buffer,
 
     data: obj.ObjData,
+    // verticies: []Vertex,
     indices: []u32,
     indexCount: u32,
 
     pub fn init(path: []const u8) !Mesh {
         const allocator = std.heap.page_allocator;
-        const cubeData = try std.fs.cwd().readFileAlloc(allocator, path, 2048);
+        const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .limited(2048));
         const data = try obj.parseObj(allocator, cubeData);
 
         // num_vertices gives the amount of faces, multiply by the
@@ -228,7 +236,7 @@ pub const Mesh = struct {
 pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     const allocator = std.heap.page_allocator;
 
-    var vertCode = try std.fs.cwd().readFileAlloc(allocator, vertPath, 1024);
+    var vertCode = try std.fs.cwd().readFileAlloc(vertPath, allocator, .limited(1024));
     defer allocator.free(vertCode);
 
     const vertexShader = gl.createShader(.vertex);
@@ -240,7 +248,7 @@ pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     }
     defer vertexShader.delete();
 
-    var fragCode = try std.fs.cwd().readFileAlloc(allocator, fragPath, 1024);
+    var fragCode = try std.fs.cwd().readFileAlloc(fragPath, allocator, .limited(1024));
     defer allocator.free(fragCode);
 
     const fragmentShader = gl.createShader(.fragment);

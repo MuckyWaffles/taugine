@@ -3,13 +3,13 @@ const tg = @import("taugine");
 const pi = std.math.pi;
 
 var mesh: tg.Mesh = undefined;
+var lightMesh: tg.Mesh = undefined;
 var program: tg.gl.Program = undefined;
+var lightCube: tg.gl.Program = undefined;
 
 fn appStart() void {
     mesh = tg.Mesh.init("cube.obj") catch unreachable;
-
-    program = tg.compileProgram("shaders/object.vert", "shaders/basic.frag") catch unreachable;
-    program.use();
+    lightMesh = tg.Mesh.init("cube.obj") catch unreachable;
 
     const projection = glm.perspective(
         45.0 / 180.0 * 3.141,
@@ -17,11 +17,26 @@ fn appStart() void {
         0.1,
         100.0,
     );
+
+    lightCube = tg.compileProgram("shaders/object.vert", "shaders/basic.frag") catch unreachable;
+    lightCube.use();
+
+    lightCube.uniformMatrix4(
+        lightCube.uniformLocation("projection"),
+        false,
+        @ptrCast(&projection.vals),
+    );
+
+    program = tg.compileProgram("shaders/object.vert", "shaders/object.frag") catch unreachable;
+    program.use();
+
     program.uniformMatrix4(
         program.uniformLocation("projection"),
         false,
         @ptrCast(&projection.vals),
     );
+    program.uniform3f(program.uniformLocation("objectColor"), 1.0, 0.5, 0.2);
+    program.uniform3f(program.uniformLocation("lightColor"), 1.0, 1.0, 1.0);
 }
 
 const glm = tg.glm;
@@ -64,6 +79,8 @@ fn appProcess() void {
 
     const view = glm.lookAt(camPos, camPos.add(camFront), up);
 
+    // Drawing main cube
+    program.use();
     program.uniformMatrix4(
         program.uniformLocation("view"),
         false,
@@ -79,6 +96,23 @@ fn appProcess() void {
         @ptrCast(&model.vals),
     );
     tg.gl.drawElements(.triangles, mesh.indices.len, .unsigned_int, 0);
+
+    // Drawing light cube
+    lightCube.use();
+
+    lightCube.uniformMatrix4(
+        lightCube.uniformLocation("view"),
+        false,
+        @ptrCast(&view.vals),
+    );
+
+    var lightModel = glm.translation(tg.glm.vec3(0.0, 4.0, -4.0));
+    lightCube.uniformMatrix4(
+        lightCube.uniformLocation("model"),
+        false,
+        @ptrCast(&lightModel.vals),
+    );
+    tg.gl.drawElements(.triangles, lightMesh.indices.len, .unsigned_int, 0);
 }
 
 var app: tg.App = undefined;
