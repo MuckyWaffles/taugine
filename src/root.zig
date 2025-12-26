@@ -157,29 +157,30 @@ pub const Input = struct {
     }
 };
 
-// pub const Vertex = struct {
-// pos: glm.Vec3,
-// norm: glm.Vec3,
-// tex: glm.Vec3,
-// };
+pub const Vertex = struct {
+    pos: glm.Vec3,
+    norm: glm.Vec3,
+    tex: glm.Vec3,
+};
 
 pub const Mesh = struct {
     vao: gl.VertexArray,
     vbo: gl.Buffer,
     ebo: gl.Buffer,
 
-    data: obj.ObjData,
-    // verticies: []Vertex,
+    vertices: []Vertex,
     indices: []u32,
     indexCount: u32,
 
     pub fn init(path: []const u8) !Mesh {
         const allocator = std.heap.page_allocator;
         const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .limited(2048));
+        defer allocator.free(cubeData);
         const data = try obj.parseObj(allocator, cubeData);
 
         // num_vertices gives the amount of faces, multiply by the
         // 6 indices we need per face
+        const quadCount = data.meshes[0].indices.len / 4;
         const indexCount = data.meshes[0].num_vertices.len * 6;
         var indices = try allocator.alloc(u32, indexCount);
 
@@ -187,20 +188,44 @@ pub const Mesh = struct {
 
         // For some reason the indices are done as quads,
         // so we need to convert them to triangles
-        for (0..6) |i| {
+        for (0..quadCount) |i| {
             const quad = [_]u32{
                 data.meshes[0].indices[processed].vertex.?,
                 data.meshes[0].indices[processed + 1].vertex.?,
                 data.meshes[0].indices[processed + 2].vertex.?,
                 data.meshes[0].indices[processed + 3].vertex.?,
             };
-            indices[i * 6] = quad[0];
-            indices[i * 6 + 1] = quad[1];
-            indices[i * 6 + 2] = quad[2];
-            indices[i * 6 + 3] = quad[0];
-            indices[i * 6 + 4] = quad[2];
-            indices[i * 6 + 5] = quad[3];
+
+            const j = i * 6;
+            indices[j] = quad[0];
+            indices[j + 1] = quad[1];
+            indices[j + 2] = quad[2];
+            indices[j + 3] = quad[0];
+            indices[j + 4] = quad[2];
+            indices[j + 5] = quad[3];
             processed += 4;
+        }
+
+        // Copying mesh data to better Vertex array
+        const vertCount = data.vertices.len / 3;
+        var vertices = try allocator.alloc(Vertex, vertCount);
+        for (0..vertCount) |i| {
+            const vi = i * 3;
+            vertices[i].pos = glm.vec3(
+                data.vertices[vi],
+                data.vertices[vi + 1],
+                data.vertices[vi + 2],
+            );
+            vertices[i].norm = glm.vec3(
+                data.normals[i],
+                data.normals[i + 1],
+                data.normals[i + 2],
+            );
+            vertices[i].tex = glm.vec3(
+                data.tex_coords[i],
+                data.tex_coords[i + 1],
+                data.tex_coords[i + 2],
+            );
         }
 
         var mesh = Mesh{
@@ -208,28 +233,54 @@ pub const Mesh = struct {
             .vbo = gl.genBuffer(),
             .ebo = gl.genBuffer(),
 
-            .data = data,
+            .vertices = vertices,
             .indices = indices,
             .indexCount = @intCast(data.meshes[0].indices.len),
         };
         mesh.bind();
 
-        mesh.vbo.data(f32, mesh.data.vertices, .static_draw);
+        mesh.vbo.data(Vertex, mesh.vertices, .static_draw);
         mesh.ebo.data(u32, mesh.indices, .static_draw);
 
-        gl.vertexAttribPointer(0, 3, .float, false, 3 * @sizeOf(f32), 0);
+        gl.vertexAttribPointer(
+            0,
+            3,
+            .float,
+            false,
+            @sizeOf(Vertex),
+            @offsetOf(Vertex, "pos"),
+        );
         gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(
+            1,
+            3,
+            .float,
+            false,
+            @sizeOf(Vertex),
+            @offsetOf(Vertex, "norm"),
+        );
+        gl.enableVertexAttribArray(1);
 
         return mesh;
     }
     pub fn deinit(self: *Mesh) void {
+        // Free allocated memory
         const allocator = std.heap.page_allocator;
-        self.data.deinit(allocator);
+        allocator.free(self.vertices);
+        allocator.free(self.indices);
+
+        // Delete OpenGL objects
+        gl.deleteVertexArray(self.vao);
+        gl.deleteBuffer(self.vbo);
+        gl.deleteBuffer(self.ebo);
     }
-    pub fn bind(self: *Mesh) void {
+    pub fn bind(self: *const Mesh) void {
         self.vao.bind();
         self.vbo.bind(.array_buffer);
         self.ebo.bind(.element_array_buffer);
+    }
+    pub fn draw(self: *const Mesh) void {
+        gl.drawElements(.triangles, self.indices.len, .unsigned_int, 0);
     }
 };
 

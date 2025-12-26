@@ -12,7 +12,7 @@ fn appStart() void {
     lightMesh = tg.Mesh.init("cube.obj") catch unreachable;
 
     const projection = glm.perspective(
-        45.0 / 180.0 * 3.141,
+        pi / 4.0,
         @as(f32, @floatFromInt(app.screenWidth)) / @as(f32, @floatFromInt(app.screenHeight)),
         0.1,
         100.0,
@@ -80,24 +80,30 @@ fn appProcess() void {
     const view = glm.lookAt(camPos, camPos.add(camFront), up);
 
     // Drawing main cube
+    mesh.bind();
     program.use();
+
     program.uniformMatrix4(
         program.uniformLocation("view"),
         false,
         @ptrCast(&view.vals),
     );
 
-    var model = glm.translation(tg.glm.vec3(0.0, 0.0, 0.0));
-    const angle = 20.0;
-    model = model.matmul(tg.glm.rotation(angle / 180.0 * 3.141, tg.glm.vec3(1.0, 0.3, 0.5)));
+    var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
+    model = model.matmul(glm.rotation(pi / 12.0, glm.vec3(1.0, 0.3, 0.5)));
     program.uniformMatrix4(
         program.uniformLocation("model"),
         false,
         @ptrCast(&model.vals),
     );
-    tg.gl.drawElements(.triangles, mesh.indices.len, .unsigned_int, 0);
+
+    program.uniform3f(program.uniformLocation("lightPos"), 0.0, 4.0, -4.0);
+
+    // tg.gl.drawElements(.triangles, mesh.indices.len, .unsigned_int, 0);
+    mesh.draw();
 
     // Drawing light cube
+    lightMesh.bind();
     lightCube.use();
 
     lightCube.uniformMatrix4(
@@ -106,7 +112,7 @@ fn appProcess() void {
         @ptrCast(&view.vals),
     );
 
-    var lightModel = glm.translation(tg.glm.vec3(0.0, 4.0, -4.0));
+    var lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
     lightCube.uniformMatrix4(
         lightCube.uniformLocation("model"),
         false,
@@ -120,8 +126,8 @@ var app: tg.App = undefined;
 pub fn main() !void {
     app = try tg.App.init(
         "Taugine",
-        800,
-        600,
+        900,
+        700,
         appStart,
         appProcess,
     );
