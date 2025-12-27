@@ -2,40 +2,58 @@ const std = @import("std");
 const tg = @import("taugine");
 const pi = std.math.pi;
 
-var mesh: tg.Mesh = undefined;
-var lightMesh: tg.Mesh = undefined;
+var cubeMesh: tg.Mesh = undefined;
 var cubeShader: tg.Shader = undefined;
+
+var lightMesh: tg.Mesh = undefined;
 var lightShader: tg.Shader = undefined;
 
-fn appStart() void {
-    mesh = tg.Mesh.init("cube.obj") catch unreachable;
-    lightMesh = tg.Mesh.init("cube.obj") catch unreachable;
+var drumMesh: tg.Mesh = undefined;
+var drumShader: tg.Shader = undefined;
 
+fn appStart() void {
     lightShader = tg.Shader.create(
         "shaders/object.vert",
         "shaders/basic.frag",
-        tg.Uniforms{
-            .projection = true,
-            .view = true,
-            .model = glm.translation(glm.vec3(0.0, 0.0, 0.0)),
-        },
     ) catch unreachable;
-    lightShader.use();
 
     cubeShader = tg.Shader.create(
         "shaders/object.vert",
         "shaders/object.frag",
-        tg.Uniforms{
-            .projection = true,
-            .view = true,
-            .model = glm.translation(glm.vec3(0.0, 0.0, 0.0)),
-        },
     ) catch unreachable;
-    cubeShader.use();
 
-    cubeShader.uniformVec3("objectColor", glm.vec3(1.0, 0.5, 0.2));
-    cubeShader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
-    cubeShader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
+    const defaultUniform = tg.Uniforms{
+        .project = true,
+        .view = true,
+        .model = tg.identityMat4,
+    };
+
+    lightMesh = tg.Mesh.init(
+        "cube.obj",
+        lightShader,
+        defaultUniform,
+    ) catch unreachable;
+    const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
+    lightMesh.uniforms.model = lightModel;
+
+    cubeMesh = tg.Mesh.init(
+        "cube.obj",
+        cubeShader,
+        defaultUniform,
+    ) catch unreachable;
+    const model = glm.translation(glm.vec3(0.0, 0.0, 0.0)).matmul(glm.rotation(
+        pi / 12.0,
+        glm.vec3(1.0, 0.3, 0.5),
+    ));
+    cubeMesh.uniforms.model = model;
+
+    drumMesh = tg.Mesh.init(
+        "drum.obj",
+        cubeShader,
+        defaultUniform,
+    ) catch unreachable;
+    const drumModel = glm.translation(glm.vec3(4.0, 0.0, 0.0));
+    drumMesh.uniforms.model = drumModel;
 
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);
@@ -64,27 +82,26 @@ fn appProcess() void {
     if (tg.Input.lookLeft) camera.yaw -= 0.01;
     if (tg.Input.lookRight) camera.yaw += 0.01;
 
-    // Drawing main cube
-    mesh.bind();
-    cubeShader.use();
-
-    var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
-    model = model.matmul(glm.rotation(pi / 12.0, glm.vec3(1.0, 0.3, 0.5)));
-    cubeShader.uniforms.model = model;
-
-    cubeShader.setUniforms();
-
-    mesh.draw();
-
     // Drawing light cube
     lightMesh.bind();
-    lightShader.use();
-
-    const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
-    lightShader.uniforms.model = lightModel;
-    lightShader.setUniforms();
-
     lightMesh.draw();
+
+    // Find a better way to set these?
+    cubeMesh.shader.uniformVec3("objectColor", glm.vec3(1.0, 0.5, 0.2));
+    cubeMesh.shader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
+    cubeMesh.shader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
+
+    // Drawing main cube
+    cubeMesh.bind();
+    cubeMesh.draw();
+
+    drumMesh.shader.uniformVec3("objectColor", glm.vec3(0.2, 0.5, 1.0));
+    drumMesh.shader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
+    drumMesh.shader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
+
+    // Drawing barrel
+    drumMesh.bind();
+    drumMesh.draw();
 }
 
 var app: tg.App = undefined;

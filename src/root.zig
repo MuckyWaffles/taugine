@@ -16,7 +16,7 @@ fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const any
 }
 
 pub const App = struct {
-    title: []const u8,
+    title: [:0]const u8,
     screenWidth: u16,
     screenHeight: u16,
 
@@ -29,7 +29,7 @@ pub const App = struct {
 
     /// Initialize app
     pub fn init(
-        title: []const u8,
+        title: [:0]const u8,
         width: u16,
         height: u16,
         appStart: *const fn () void,
@@ -59,12 +59,7 @@ pub const App = struct {
 
         // Setup window
         const windowFlags = sdl.video.Window.Flags{ .open_gl = true };
-        const window = try sdl.video.Window.init(
-            @ptrCast(title),
-            width,
-            height,
-            windowFlags,
-        );
+        const window = try sdl.video.Window.init(title, width, height, windowFlags);
 
         // Init OpenGL context
         const context = try sdlgl.Context.init(window);
@@ -74,9 +69,13 @@ pub const App = struct {
 
         gl.enable(.multisample);
         gl.enable(.depth_test);
+
+        // There's some issue's with loading
+        // our objects that makes these settings
+        // look a little odd...
         gl.frontFace(.ccw);
-        gl.enable(.cull_face);
-        gl.cullFace(.back);
+        //gl.enable(.cull_face);
+        //gl.cullFace(.back);
 
         // Im unsure of whether or not to include in the App struct
         projection = glm.perspective(
@@ -85,16 +84,6 @@ pub const App = struct {
             0.1,
             100.0,
         );
-
-        // Set view to identity matrix by default
-        view = glm.Mat4{
-            .vals = [4][4]f32{
-                .{ 1.0, 0.0, 0.0, 0.0 },
-                .{ 0.0, 1.0, 0.0, 0.0 },
-                .{ 0.0, 0.0, 1.0, 0.0 },
-                .{ 0.0, 0.0, 0.0, 1.0 },
-            },
-        };
 
         return App{
             .appStart = appStart,
@@ -174,14 +163,23 @@ pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     return shaderProgram;
 }
 
-pub var projection: glm.Mat4 = undefined;
-pub var view: glm.Mat4 = undefined;
+pub const identityMat4 = glm.Mat4{
+    .vals = [4][4]f32{
+        .{ 1.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 1.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    },
+};
+
+pub var projection: glm.Mat4 = identityMat4;
+pub var view: glm.Mat4 = identityMat4;
 pub var camera: ?*Camera = null;
 
 /// Holds some universal uniforms,
 /// keeps space for custom defined ones
 pub const Uniforms = struct {
-    projection: bool,
+    project: bool,
     view: bool,
     model: ?glm.Mat4,
 };
@@ -189,26 +187,14 @@ pub const Uniforms = struct {
 pub const Shader = struct {
     program: gl.Program,
 
-    uniforms: Uniforms,
-
     pub fn create(
         vertPath: []const u8,
         fragPath: []const u8,
-        uniforms: Uniforms,
     ) !Shader {
-        var program = try compileProgram(vertPath, fragPath);
-
-        if (uniforms.projection) {
-            program.uniformMatrix4(
-                program.uniformLocation("projection"),
-                false,
-                @ptrCast(&projection.vals),
-            );
-        }
+        const program = try compileProgram(vertPath, fragPath);
 
         return Shader{
             .program = program,
-            .uniforms = uniforms,
         };
     }
 
@@ -216,15 +202,27 @@ pub const Shader = struct {
         self.program.use();
     }
 
-    pub fn setUniforms(self: *Shader) void {
-        if (self.uniforms.view) {
+    // Uniforms are held in Meshes, which isn't ideal because
+    // we're then resetting uniforms with the same universal
+    // values multiple times per object rather than per shader
+    pub fn setUniforms(self: *Shader, uniforms: Uniforms) void {
+        self.program.use();
+        if (uniforms.project) {
+            self.program.uniformMatrix4(
+                self.program.uniformLocation("projection"),
+                false,
+                @ptrCast(&projection.vals),
+            );
+        }
+
+        if (uniforms.view) {
             self.program.uniformMatrix4(
                 self.program.uniformLocation("view"),
                 false,
                 @ptrCast(&view.vals),
             );
         }
-        if (self.uniforms.model) |model| {
+        if (uniforms.model) |model| {
             self.program.uniformMatrix4(
                 self.program.uniformLocation("model"),
                 false,
@@ -236,6 +234,7 @@ pub const Shader = struct {
     // Nice abstraction, but I wonder if it's worthwhile storing
     // Uniform locations for faster setting.
     pub fn uniformVec3(self: *Shader, name: [:0]const u8, vec: glm.Vec3) void {
+        self.use();
         self.program.uniform3f(
             self.program.uniformLocation(name),
             vec.vals[0],
@@ -259,9 +258,12 @@ pub const Mesh = struct {
     vertices: []Vertex,
     indices: []u32,
 
-    pub fn init(path: []const u8) !Mesh {
+    shader: Shader,
+    uniforms: Uniforms,
+
+    pub fn init(path: []const u8, shader: Shader, uniforms: Uniforms) !Mesh {
         const allocator = std.heap.page_allocator;
-        const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .limited(2048));
+        const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .unlimited);
         defer allocator.free(cubeData);
         const data = try obj.parseObj(allocator, cubeData);
 
@@ -319,6 +321,9 @@ pub const Mesh = struct {
 
             .vertices = vertices,
             .indices = indices,
+
+            .shader = shader,
+            .uniforms = uniforms,
         };
         mesh.bind();
 
@@ -348,7 +353,8 @@ pub const Mesh = struct {
         self.vbo.bind(.array_buffer);
         self.ebo.bind(.element_array_buffer);
     }
-    pub fn draw(self: *const Mesh) void {
+    pub fn draw(self: *Mesh) void {
+        self.shader.setUniforms(self.uniforms);
         gl.drawElements(.triangles, self.indices.len, .unsigned_int, 0);
     }
 };
