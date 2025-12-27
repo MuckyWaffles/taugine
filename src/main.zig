@@ -5,22 +5,22 @@ const pi = std.math.pi;
 var mesh: tg.Mesh = undefined;
 var lightMesh: tg.Mesh = undefined;
 var cubeShader: tg.Shader = undefined;
-var lightCube: tg.Shader = undefined;
+var lightShader: tg.Shader = undefined;
 
 fn appStart() void {
     mesh = tg.Mesh.init("cube.obj") catch unreachable;
     lightMesh = tg.Mesh.init("cube.obj") catch unreachable;
 
-    lightCube = tg.Shader.create(
+    lightShader = tg.Shader.create(
         "shaders/object.vert",
         "shaders/basic.frag",
         tg.Uniforms{
             .projection = true,
             .view = true,
-            .model = true,
+            .model = glm.translation(glm.vec3(0.0, 0.0, 0.0)),
         },
     ) catch unreachable;
-    lightCube.use();
+    lightShader.use();
 
     cubeShader = tg.Shader.create(
         "shaders/object.vert",
@@ -28,7 +28,7 @@ fn appStart() void {
         tg.Uniforms{
             .projection = true,
             .view = true,
-            .model = false,
+            .model = glm.translation(glm.vec3(0.0, 0.0, 0.0)),
         },
     ) catch unreachable;
     cubeShader.use();
@@ -39,6 +39,7 @@ fn appStart() void {
 
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);
+    camera.setMain();
 }
 
 const glm = tg.glm;
@@ -60,44 +61,28 @@ fn appProcess() void {
         const move = camera.relativeX().mulScalar(camSpeed);
         camera.pos = camera.pos.add(move);
     }
-    if (tg.Input.lookLeft) {
-        camera.yaw -= 0.01;
-    }
-    if (tg.Input.lookRight) {
-        camera.yaw += 0.01;
-    }
-
-    const view = camera.getView();
+    if (tg.Input.lookLeft) camera.yaw -= 0.01;
+    if (tg.Input.lookRight) camera.yaw += 0.01;
 
     // Drawing main cube
     mesh.bind();
     cubeShader.use();
-    cubeShader.setUniforms();
-    cubeShader.program.uniformMatrix4(
-        cubeShader.program.uniformLocation("view"),
-        false,
-        @ptrCast(&view.vals),
-    );
 
     var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
     model = model.matmul(glm.rotation(pi / 12.0, glm.vec3(1.0, 0.3, 0.5)));
-    cubeShader.program.uniformMatrix4(
-        cubeShader.program.uniformLocation("model"),
-        false,
-        @ptrCast(&model.vals),
-    );
+    cubeShader.uniforms.model = model;
+
+    cubeShader.setUniforms();
 
     mesh.draw();
 
     // Drawing light cube
     lightMesh.bind();
-    lightCube.use();
-    lightCube.setUniforms();
-    lightCube.program.uniformMatrix4(
-        lightCube.program.uniformLocation("view"),
-        false,
-        @ptrCast(&view.vals),
-    );
+    lightShader.use();
+
+    const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
+    lightShader.uniforms.model = lightModel;
+    lightShader.setUniforms();
 
     lightMesh.draw();
 }

@@ -178,10 +178,12 @@ pub var projection: glm.Mat4 = undefined;
 pub var view: glm.Mat4 = undefined;
 pub var camera: ?*Camera = null;
 
+/// Holds some universal uniforms,
+/// keeps space for custom defined ones
 pub const Uniforms = struct {
     projection: bool,
     view: bool,
-    model: bool,
+    model: ?glm.Mat4,
 };
 
 pub const Shader = struct {
@@ -222,12 +224,11 @@ pub const Shader = struct {
                 @ptrCast(&view.vals),
             );
         }
-        if (self.uniforms.model) {
-            var lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
+        if (self.uniforms.model) |model| {
             self.program.uniformMatrix4(
                 self.program.uniformLocation("model"),
                 false,
-                @ptrCast(&lightModel.vals),
+                @ptrCast(&model.vals),
             );
         }
     }
