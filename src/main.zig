@@ -33,9 +33,9 @@ fn appStart() void {
     ) catch unreachable;
     cubeShader.use();
 
-    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("objectColor"), 1.0, 0.5, 0.2);
-    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("lightColor"), 1.0, 1.0, 1.0);
-    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("lightPos"), 0.0, 4.0, -4.0);
+    cubeShader.uniformVec3("objectColor", glm.vec3(1.0, 0.5, 0.2));
+    cubeShader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
+    cubeShader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
 
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);

@@ -232,6 +232,17 @@ pub const Shader = struct {
             );
         }
     }
+
+    // Nice abstraction, but I wonder if it's worthwhile storing
+    // Uniform locations for faster setting.
+    pub fn uniformVec3(self: *Shader, name: [:0]const u8, vec: glm.Vec3) void {
+        self.program.uniform3f(
+            self.program.uniformLocation(name),
+            vec.vals[0],
+            vec.vals[1],
+            vec.vals[2],
+        );
+    }
 };
 
 pub const Vertex = struct {
