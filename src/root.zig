@@ -78,6 +78,24 @@ pub const App = struct {
         gl.enable(.cull_face);
         gl.cullFace(.back);
 
+        // Im unsure of whether or not to include in the App struct
+        projection = glm.perspective(
+            pi / 3.0,
+            @as(f32, @floatFromInt(width)) / @as(f32, @floatFromInt(height)),
+            0.1,
+            100.0,
+        );
+
+        // Set view to identity matrix by default
+        view = glm.Mat4{
+            .vals = [4][4]f32{
+                .{ 1.0, 0.0, 0.0, 0.0 },
+                .{ 0.0, 1.0, 0.0, 0.0 },
+                .{ 0.0, 0.0, 1.0, 0.0 },
+                .{ 0.0, 0.0, 0.0, 1.0 },
+            },
+        };
+
         return App{
             .appStart = appStart,
             .appProcess = appProcess,
@@ -109,6 +127,9 @@ pub const App = struct {
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
             gl.clear(.{ .depth = true, .color = true });
 
+            // Set view matrix if camera is set
+            if (camera) |cam| view = cam.getView();
+
             self.appProcess();
 
             try sdlgl.swapWindow(self.window);
@@ -118,41 +139,96 @@ pub const App = struct {
     }
 };
 
-pub const Input = struct {
-    pub var exitRequested: bool = false;
-    pub var moveForwards: bool = false;
-    pub var moveBackwards: bool = false;
-    pub var moveLeft: bool = false;
-    pub var moveRight: bool = false;
-    pub var lookLeft: bool = false;
-    pub var lookRight: bool = false;
+pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
+    const allocator = std.heap.page_allocator;
 
-    // Event logic.
-    fn get() void {
-        while (sdl.events.poll()) |event| {
-            switch (event) {
-                .quit => Input.exitRequested = true,
-                .terminating => Input.exitRequested = true,
-                .key_down => switch (event.key_down.scancode.?) {
-                    .w => Input.moveForwards = true,
-                    .s => Input.moveBackwards = true,
-                    .a => Input.moveLeft = true,
-                    .d => Input.moveRight = true,
-                    .left => Input.lookLeft = true,
-                    .right => Input.lookRight = true,
-                    else => {},
-                },
-                .key_up => switch (event.key_up.scancode.?) {
-                    .w => Input.moveForwards = false,
-                    .s => Input.moveBackwards = false,
-                    .a => Input.moveLeft = false,
-                    .d => Input.moveRight = false,
-                    .left => Input.lookLeft = false,
-                    .right => Input.lookRight = false,
-                    else => {},
-                },
-                else => {},
-            }
+    var vertCode = try std.fs.cwd().readFileAlloc(vertPath, allocator, .limited(1024));
+    defer allocator.free(vertCode);
+
+    const vertexShader = gl.createShader(.vertex);
+    vertexShader.source(1, &vertCode);
+    vertexShader.compile();
+    if (vertexShader.get(.compile_status) == 0) {
+        const err = try vertexShader.getCompileLog(allocator);
+        std.debug.print("{s}\n", .{err});
+    }
+    defer vertexShader.delete();
+
+    var fragCode = try std.fs.cwd().readFileAlloc(fragPath, allocator, .limited(1024));
+    defer allocator.free(fragCode);
+
+    const fragmentShader = gl.createShader(.fragment);
+    fragmentShader.source(1, &fragCode);
+    fragmentShader.compile();
+    if (fragmentShader.get(.compile_status) == 0) {
+        const err = try vertexShader.getCompileLog(allocator);
+        std.debug.print("{s}\n", .{err});
+    }
+    defer fragmentShader.delete();
+
+    const shaderProgram = gl.createProgram();
+    shaderProgram.attach(vertexShader);
+    shaderProgram.attach(fragmentShader);
+    shaderProgram.link();
+
+    return shaderProgram;
+}
+
+pub var projection: glm.Mat4 = undefined;
+pub var view: glm.Mat4 = undefined;
+pub var camera: ?*Camera = null;
+
+pub const Uniforms = struct {
+    projection: bool,
+    view: bool,
+    model: bool,
+};
+
+pub const Shader = struct {
+    program: gl.Program,
+
+    uniforms: Uniforms,
+
+    pub fn create(
+        vertPath: []const u8,
+        fragPath: []const u8,
+        uniforms: Uniforms,
+    ) !Shader {
+        var program = try compileProgram(vertPath, fragPath);
+
+        if (uniforms.projection) {
+            program.uniformMatrix4(
+                program.uniformLocation("projection"),
+                false,
+                @ptrCast(&projection.vals),
+            );
+        }
+
+        return Shader{
+            .program = program,
+            .uniforms = uniforms,
+        };
+    }
+
+    pub fn use(self: *Shader) void {
+        self.program.use();
+    }
+
+    pub fn setUniforms(self: *Shader) void {
+        if (self.uniforms.view) {
+            self.program.uniformMatrix4(
+                self.program.uniformLocation("view"),
+                false,
+                @ptrCast(&view.vals),
+            );
+        }
+        if (self.uniforms.model) {
+            var lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
+            self.program.uniformMatrix4(
+                self.program.uniformLocation("model"),
+                false,
+                @ptrCast(&lightModel.vals),
+            );
         }
     }
 };
@@ -265,41 +341,6 @@ pub const Mesh = struct {
     }
 };
 
-pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
-    const allocator = std.heap.page_allocator;
-
-    var vertCode = try std.fs.cwd().readFileAlloc(vertPath, allocator, .limited(1024));
-    defer allocator.free(vertCode);
-
-    const vertexShader = gl.createShader(.vertex);
-    vertexShader.source(1, &vertCode);
-    vertexShader.compile();
-    if (vertexShader.get(.compile_status) == 0) {
-        const err = try vertexShader.getCompileLog(allocator);
-        std.debug.print("{s}\n", .{err});
-    }
-    defer vertexShader.delete();
-
-    var fragCode = try std.fs.cwd().readFileAlloc(fragPath, allocator, .limited(1024));
-    defer allocator.free(fragCode);
-
-    const fragmentShader = gl.createShader(.fragment);
-    fragmentShader.source(1, &fragCode);
-    fragmentShader.compile();
-    if (fragmentShader.get(.compile_status) == 0) {
-        const err = try vertexShader.getCompileLog(allocator);
-        std.debug.print("{s}\n", .{err});
-    }
-    defer fragmentShader.delete();
-
-    const shaderProgram = gl.createProgram();
-    shaderProgram.attach(vertexShader);
-    shaderProgram.attach(fragmentShader);
-    shaderProgram.link();
-
-    return shaderProgram;
-}
-
 const pi = std.math.pi;
 const up = glm.vec3(0.0, 1.0, 0.0);
 
@@ -324,5 +365,49 @@ pub const Camera = struct {
     /// Returns x axis relative to the camera
     pub fn relativeX(self: *Camera) glm.Vec3 {
         return self.front.cross(up).normalize();
+    }
+
+    /// Set camera to be main
+    pub fn setMain(self: *Camera) void {
+        camera = self;
+    }
+};
+
+pub const Input = struct {
+    pub var exitRequested: bool = false;
+    pub var moveForwards: bool = false;
+    pub var moveBackwards: bool = false;
+    pub var moveLeft: bool = false;
+    pub var moveRight: bool = false;
+    pub var lookLeft: bool = false;
+    pub var lookRight: bool = false;
+
+    // Event logic.
+    fn get() void {
+        while (sdl.events.poll()) |event| {
+            switch (event) {
+                .quit => Input.exitRequested = true,
+                .terminating => Input.exitRequested = true,
+                .key_down => switch (event.key_down.scancode.?) {
+                    .w => Input.moveForwards = true,
+                    .s => Input.moveBackwards = true,
+                    .a => Input.moveLeft = true,
+                    .d => Input.moveRight = true,
+                    .left => Input.lookLeft = true,
+                    .right => Input.lookRight = true,
+                    else => {},
+                },
+                .key_up => switch (event.key_up.scancode.?) {
+                    .w => Input.moveForwards = false,
+                    .s => Input.moveBackwards = false,
+                    .a => Input.moveLeft = false,
+                    .d => Input.moveRight = false,
+                    .left => Input.lookLeft = false,
+                    .right => Input.lookRight = false,
+                    else => {},
+                },
+                else => {},
+            }
+        }
     }
 };

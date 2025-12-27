@@ -4,39 +4,38 @@ const pi = std.math.pi;
 
 var mesh: tg.Mesh = undefined;
 var lightMesh: tg.Mesh = undefined;
-var program: tg.gl.Program = undefined;
-var lightCube: tg.gl.Program = undefined;
+var cubeShader: tg.Shader = undefined;
+var lightCube: tg.Shader = undefined;
 
 fn appStart() void {
     mesh = tg.Mesh.init("cube.obj") catch unreachable;
     lightMesh = tg.Mesh.init("cube.obj") catch unreachable;
 
-    const projection = glm.perspective(
-        pi / 4.0,
-        @as(f32, @floatFromInt(app.screenWidth)) / @as(f32, @floatFromInt(app.screenHeight)),
-        0.1,
-        100.0,
-    );
-
-    lightCube = tg.compileProgram("shaders/object.vert", "shaders/basic.frag") catch unreachable;
+    lightCube = tg.Shader.create(
+        "shaders/object.vert",
+        "shaders/basic.frag",
+        tg.Uniforms{
+            .projection = true,
+            .view = true,
+            .model = true,
+        },
+    ) catch unreachable;
     lightCube.use();
 
-    lightCube.uniformMatrix4(
-        lightCube.uniformLocation("projection"),
-        false,
-        @ptrCast(&projection.vals),
-    );
+    cubeShader = tg.Shader.create(
+        "shaders/object.vert",
+        "shaders/object.frag",
+        tg.Uniforms{
+            .projection = true,
+            .view = true,
+            .model = false,
+        },
+    ) catch unreachable;
+    cubeShader.use();
 
-    program = tg.compileProgram("shaders/object.vert", "shaders/object.frag") catch unreachable;
-    program.use();
-
-    program.uniformMatrix4(
-        program.uniformLocation("projection"),
-        false,
-        @ptrCast(&projection.vals),
-    );
-    program.uniform3f(program.uniformLocation("objectColor"), 1.0, 0.5, 0.2);
-    program.uniform3f(program.uniformLocation("lightColor"), 1.0, 1.0, 1.0);
+    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("objectColor"), 1.0, 0.5, 0.2);
+    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("lightColor"), 1.0, 1.0, 1.0);
+    cubeShader.program.uniform3f(cubeShader.program.uniformLocation("lightPos"), 0.0, 4.0, -4.0);
 
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);
@@ -72,44 +71,35 @@ fn appProcess() void {
 
     // Drawing main cube
     mesh.bind();
-    program.use();
-
-    program.uniformMatrix4(
-        program.uniformLocation("view"),
+    cubeShader.use();
+    cubeShader.setUniforms();
+    cubeShader.program.uniformMatrix4(
+        cubeShader.program.uniformLocation("view"),
         false,
         @ptrCast(&view.vals),
     );
 
     var model = glm.translation(glm.vec3(0.0, 0.0, 0.0));
     model = model.matmul(glm.rotation(pi / 12.0, glm.vec3(1.0, 0.3, 0.5)));
-    program.uniformMatrix4(
-        program.uniformLocation("model"),
+    cubeShader.program.uniformMatrix4(
+        cubeShader.program.uniformLocation("model"),
         false,
         @ptrCast(&model.vals),
     );
 
-    program.uniform3f(program.uniformLocation("lightPos"), 0.0, 4.0, -4.0);
-
-    // tg.gl.drawElements(.triangles, mesh.indices.len, .unsigned_int, 0);
     mesh.draw();
 
     // Drawing light cube
     lightMesh.bind();
     lightCube.use();
-
-    lightCube.uniformMatrix4(
-        lightCube.uniformLocation("view"),
+    lightCube.setUniforms();
+    lightCube.program.uniformMatrix4(
+        lightCube.program.uniformLocation("view"),
         false,
         @ptrCast(&view.vals),
     );
 
-    var lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
-    lightCube.uniformMatrix4(
-        lightCube.uniformLocation("model"),
-        false,
-        @ptrCast(&lightModel.vals),
-    );
-    tg.gl.drawElements(.triangles, lightMesh.indices.len, .unsigned_int, 0);
+    lightMesh.draw();
 }
 
 var app: tg.App = undefined;
@@ -117,8 +107,8 @@ var app: tg.App = undefined;
 pub fn main() !void {
     app = try tg.App.init(
         "Taugine",
-        900,
-        700,
+        950,
+        750,
         appStart,
         appProcess,
     );
