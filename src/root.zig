@@ -299,3 +299,30 @@ pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
 
     return shaderProgram;
 }
+
+const pi = std.math.pi;
+const up = glm.vec3(0.0, 1.0, 0.0);
+
+pub const Camera = struct {
+    pos: glm.Vec3 = glm.Vec3{ .vals = [3]f32{ 0.0, 0.0, 0.0 } },
+    front: glm.Vec3,
+
+    yaw: f32,
+    pitch: f32,
+
+    pub fn getView(self: *Camera) glm.Mat4 {
+        const direction = glm.vec3(
+            std.math.cos(self.yaw * pi) * std.math.cos(self.pitch * pi),
+            std.math.sin(self.pitch * pi),
+            std.math.sin(self.yaw * pi) * std.math.cos(self.pitch * pi),
+        );
+        self.front = direction.normalize();
+
+        return glm.lookAt(self.pos, self.pos.add(self.front), up);
+    }
+
+    /// Returns x axis relative to the camera
+    pub fn relativeX(self: *Camera) glm.Vec3 {
+        return self.front.cross(up).normalize();
+    }
+};

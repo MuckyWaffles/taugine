@@ -37,47 +37,38 @@ fn appStart() void {
     );
     program.uniform3f(program.uniformLocation("objectColor"), 1.0, 0.5, 0.2);
     program.uniform3f(program.uniformLocation("lightColor"), 1.0, 1.0, 1.0);
+
+    camera.yaw = -0.5;
+    camera.pos = glm.vec3(0.0, 0.0, 5.0);
 }
 
 const glm = tg.glm;
-var camPos = glm.vec3(0.0, 0.0, 3.0);
-var camFront = glm.vec3(0.0, 0.0, -1.0);
-
-var yaw: f32 = -0.5;
-var pitch: f32 = 0.0;
+var camera: tg.Camera = undefined;
 
 fn appProcess() void {
     const camSpeed = 0.1;
-    const up = glm.vec3(0.0, 1.0, 0.0);
     if (tg.Input.moveForwards) {
-        camPos = camPos.add(camFront.mulScalar(camSpeed));
+        camera.pos = camera.pos.add(camera.front.mulScalar(camSpeed));
     }
     if (tg.Input.moveBackwards) {
-        camPos = camPos.sub(camFront.mulScalar(camSpeed));
+        camera.pos = camera.pos.sub(camera.front.mulScalar(camSpeed));
     }
     if (tg.Input.moveLeft) {
-        const move = camFront.cross(up).normalize();
-        camPos = camPos.sub(move.mulScalar(camSpeed));
+        const move = camera.relativeX().mulScalar(camSpeed);
+        camera.pos = camera.pos.sub(move);
     }
     if (tg.Input.moveRight) {
-        const move = camFront.cross(up).normalize();
-        camPos = camPos.add(move.mulScalar(camSpeed));
+        const move = camera.relativeX().mulScalar(camSpeed);
+        camera.pos = camera.pos.add(move);
     }
     if (tg.Input.lookLeft) {
-        yaw -= 0.01;
+        camera.yaw -= 0.01;
     }
     if (tg.Input.lookRight) {
-        yaw += 0.01;
+        camera.yaw += 0.01;
     }
 
-    const direction = glm.vec3(
-        std.math.cos(yaw * pi) * std.math.cos(pitch * pi),
-        std.math.sin(pitch * pi),
-        std.math.sin(yaw * pi) * std.math.cos(pitch * pi),
-    );
-    camFront = direction.normalize();
-
-    const view = glm.lookAt(camPos, camPos.add(camFront), up);
+    const view = camera.getView();
 
     // Drawing main cube
     mesh.bind();
