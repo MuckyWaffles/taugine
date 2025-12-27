@@ -160,7 +160,7 @@ pub const Input = struct {
 pub const Vertex = struct {
     pos: glm.Vec3,
     norm: glm.Vec3,
-    tex: glm.Vec3,
+    tex: glm.Vec2,
 };
 
 pub const Mesh = struct {
@@ -170,7 +170,6 @@ pub const Mesh = struct {
 
     vertices: []Vertex,
     indices: []u32,
-    indexCount: u32,
 
     pub fn init(path: []const u8) !Mesh {
         const allocator = std.heap.page_allocator;
@@ -178,54 +177,51 @@ pub const Mesh = struct {
         defer allocator.free(cubeData);
         const data = try obj.parseObj(allocator, cubeData);
 
-        // num_vertices gives the amount of faces, multiply by the
-        // 6 indices we need per face
-        const quadCount = data.meshes[0].indices.len / 4;
-        const indexCount = data.meshes[0].num_vertices.len * 6;
-        var indices = try allocator.alloc(u32, indexCount);
+        const quads = data.meshes[0].indices;
+        const quad_count = quads.len / 4;
+        const vertex_count = quad_count * 6;
 
-        var processed: u32 = 0;
+        var vertices = try allocator.alloc(Vertex, vertex_count);
+        var indices = try allocator.alloc(u32, vertex_count);
 
-        // For some reason the indices are done as quads,
-        // so we need to convert them to triangles
-        for (0..quadCount) |i| {
-            const quad = [_]u32{
-                data.meshes[0].indices[processed].vertex.?,
-                data.meshes[0].indices[processed + 1].vertex.?,
-                data.meshes[0].indices[processed + 2].vertex.?,
-                data.meshes[0].indices[processed + 3].vertex.?,
+        var j: usize = 0;
+        for (0..quad_count) |i| {
+            // Objects are exported as quads (for some reason),
+            // so we need to convert them
+            const qi = i * 4;
+            const triangles = [6]obj.Mesh.Index{
+                quads[qi + 0], quads[qi + 1], quads[qi + 2],
+                quads[qi + 0], quads[qi + 2], quads[qi + 3],
             };
 
-            const j = i * 6;
-            indices[j] = quad[0];
-            indices[j + 1] = quad[1];
-            indices[j + 2] = quad[2];
-            indices[j + 3] = quad[0];
-            indices[j + 4] = quad[2];
-            indices[j + 5] = quad[3];
-            processed += 4;
-        }
+            for (triangles) |f| {
+                // Create all our vertices
+                const vi = f.vertex.? * 3;
+                const ni = f.normal.? * 3;
 
-        // Copying mesh data to better Vertex array
-        const vertCount = data.vertices.len / 3;
-        var vertices = try allocator.alloc(Vertex, vertCount);
-        for (0..vertCount) |i| {
-            const vi = i * 3;
-            vertices[i].pos = glm.vec3(
-                data.vertices[vi],
-                data.vertices[vi + 1],
-                data.vertices[vi + 2],
-            );
-            vertices[i].norm = glm.vec3(
-                data.normals[i],
-                data.normals[i + 1],
-                data.normals[i + 2],
-            );
-            vertices[i].tex = glm.vec3(
-                data.tex_coords[i],
-                data.tex_coords[i + 1],
-                data.tex_coords[i + 2],
-            );
+                vertices[j].pos = glm.vec3(
+                    data.vertices[vi],
+                    data.vertices[vi + 1],
+                    data.vertices[vi + 2],
+                );
+
+                vertices[j].norm = glm.vec3(
+                    data.normals[ni],
+                    data.normals[ni + 1],
+                    data.normals[ni + 2],
+                ).normalize();
+
+                if (f.tex_coord) |ti| {
+                    const t = ti * 2;
+                    vertices[j].tex = glm.Vec2{ .vals = .{
+                        data.tex_coords[t],
+                        data.tex_coords[t + 1],
+                    } };
+                }
+
+                indices[j] = @as(u32, @intCast(j));
+                j += 1;
+            }
         }
 
         var mesh = Mesh{
@@ -235,30 +231,15 @@ pub const Mesh = struct {
 
             .vertices = vertices,
             .indices = indices,
-            .indexCount = @intCast(data.meshes[0].indices.len),
         };
         mesh.bind();
 
         mesh.vbo.data(Vertex, mesh.vertices, .static_draw);
         mesh.ebo.data(u32, mesh.indices, .static_draw);
 
-        gl.vertexAttribPointer(
-            0,
-            3,
-            .float,
-            false,
-            @sizeOf(Vertex),
-            @offsetOf(Vertex, "pos"),
-        );
+        gl.vertexAttribPointer(0, 3, .float, false, @sizeOf(Vertex), @offsetOf(Vertex, "pos"));
         gl.enableVertexAttribArray(0);
-        gl.vertexAttribPointer(
-            1,
-            3,
-            .float,
-            false,
-            @sizeOf(Vertex),
-            @offsetOf(Vertex, "norm"),
-        );
+        gl.vertexAttribPointer(1, 3, .float, false, @sizeOf(Vertex), @offsetOf(Vertex, "norm"));
         gl.enableVertexAttribArray(1);
 
         return mesh;
