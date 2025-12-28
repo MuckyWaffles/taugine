@@ -2,38 +2,37 @@ const std = @import("std");
 const tg = @import("taugine");
 const pi = std.math.pi;
 
-var cubeMesh: tg.Mesh = undefined;
-var cubeShader: tg.Shader = undefined;
+var cubeMesh: tg.render.Mesh = undefined;
+var cubeShader: tg.render.Shader = undefined;
 
-var lightMesh: tg.Mesh = undefined;
-var lightShader: tg.Shader = undefined;
+var lightMesh: tg.render.Mesh = undefined;
+var lightShader: tg.render.Shader = undefined;
 
-var drumMesh: tg.Mesh = undefined;
-var drumShader: tg.Shader = undefined;
+var drumMesh: tg.render.Mesh = undefined;
+var drumShader: tg.render.Shader = undefined;
 
 fn appStart() void {
-    lightShader = tg.Shader.create(
+    lightShader = tg.render.Shader.create(
         "shaders/object.vert",
         "shaders/basic.frag",
     ) catch unreachable;
 
-    cubeShader = tg.Shader.create(
+    cubeShader = tg.render.Shader.create(
         "shaders/object.vert",
         "shaders/object.frag",
     ) catch unreachable;
 
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);
-    camera.setMain();
-    const view = camera.getView();
+    camera.setMain(&app);
 
     const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
-    lightMesh = tg.Mesh.init(
+    lightMesh = tg.render.Mesh.init(
         "cube.obj",
         lightShader,
-        &[_]tg.mesh.Uniform{
-            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
-            .{ .name = "view", .value = .{ .mat4 = view } },
+        &[_]tg.render.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.render.projection } },
+            .{ .name = "view", .value = .{ .mat4 = undefined } },
             .{ .name = "model", .value = .{ .mat4 = lightModel } },
         },
     ) catch unreachable;
@@ -42,12 +41,12 @@ fn appStart() void {
         pi / 12.0,
         glm.vec3(1.0, 0.3, 0.5),
     ));
-    cubeMesh = tg.Mesh.init(
+    cubeMesh = tg.render.Mesh.init(
         "cube.obj",
         cubeShader,
-        &[_]tg.mesh.Uniform{
-            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
-            .{ .name = "view", .value = .{ .mat4 = view } },
+        &[_]tg.render.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.render.projection } },
+            .{ .name = "view", .value = .{ .mat4 = undefined } },
             .{ .name = "model", .value = .{ .mat4 = cubeModel } },
             .{ .name = "objectColor", .value = .{ .vec3 = glm.vec3(1.0, 0.5, 0.2) } },
             .{ .name = "lightColor", .value = .{ .vec3 = glm.vec3(1.0, 1.0, 1.0) } },
@@ -56,12 +55,12 @@ fn appStart() void {
     ) catch unreachable;
 
     const drumModel = glm.translation(glm.vec3(4.0, 0.0, 0.0));
-    drumMesh = tg.Mesh.init(
+    drumMesh = tg.render.Mesh.init(
         "drum.obj",
         cubeShader,
-        &[_]tg.mesh.Uniform{
-            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
-            .{ .name = "view", .value = .{ .mat4 = view } },
+        &[_]tg.render.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.render.projection } },
+            .{ .name = "view", .value = .{ .mat4 = undefined } },
             .{ .name = "model", .value = .{ .mat4 = drumModel } },
             .{ .name = "objectColor", .value = .{ .vec3 = glm.vec3(0.2, 0.5, 1.0) } },
             .{ .name = "lightColor", .value = .{ .vec3 = glm.vec3(1.0, 1.0, 1.0) } },
@@ -108,13 +107,7 @@ fn appProcess() void {
 var app: tg.App = undefined;
 
 pub fn main() !void {
-    app = try tg.App.init(
-        "Taugine",
-        960,
-        760,
-        appStart,
-        appProcess,
-    );
+    app = try tg.App.init("Taugine", 960, 760, appStart, appProcess);
     defer app.deinit();
 
     try app.run();
