@@ -10,6 +10,7 @@ const c = sdl.c;
 const obj = @import("obj");
 
 pub const glm = @import("glm.zig");
+pub const mesh = @import("mesh.zig");
 
 fn getProcAddressWrapper(comptime _: type, symbolName: [:0]const u8) ?*const anyopaque {
     return c.SDL_GL_GetProcAddress(symbolName);
@@ -128,6 +129,59 @@ pub const App = struct {
     }
 };
 
+pub const identityMat4 = glm.Mat4{
+    .vals = [4][4]f32{
+        .{ 1.0, 0.0, 0.0, 0.0 },
+        .{ 0.0, 1.0, 0.0, 0.0 },
+        .{ 0.0, 0.0, 1.0, 0.0 },
+        .{ 0.0, 0.0, 0.0, 1.0 },
+    },
+};
+
+pub var projection: glm.Mat4 = identityMat4;
+pub var view: glm.Mat4 = identityMat4;
+pub var camera: ?*Camera = null;
+
+pub const Vertex = struct {
+    pos: glm.Vec3,
+    norm: glm.Vec3,
+    tex: glm.Vec2,
+};
+
+pub const Shader = struct {
+    program: gl.Program,
+
+    pub fn create(
+        vertPath: []const u8,
+        fragPath: []const u8,
+    ) !Shader {
+        const program = try compileProgram(vertPath, fragPath);
+
+        return Shader{
+            .program = program,
+        };
+    }
+
+    pub fn use(self: *Shader) void {
+        self.program.use();
+    }
+
+    // Uniforms are held in Meshes, which maybe isn't ideal because
+    // we're then resetting uniforms with the same universal
+    // values multiple times per object rather than per shader
+    pub fn setUniforms(self: *Shader, uniforms: []mesh.Uniform) void {
+        // Find global uniforms
+        self.program.use();
+        for (uniforms) |*uniform| {
+            // TODO: This is stupid and really bad
+            if (std.mem.eql(u8, uniform.name, "view")) {
+                uniform.value = .{ .mat4 = view };
+            }
+            uniform.set(self.program);
+        }
+    }
+};
+
 pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     const allocator = std.heap.page_allocator;
 
@@ -163,93 +217,6 @@ pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     return shaderProgram;
 }
 
-pub const identityMat4 = glm.Mat4{
-    .vals = [4][4]f32{
-        .{ 1.0, 0.0, 0.0, 0.0 },
-        .{ 0.0, 1.0, 0.0, 0.0 },
-        .{ 0.0, 0.0, 1.0, 0.0 },
-        .{ 0.0, 0.0, 0.0, 1.0 },
-    },
-};
-
-pub var projection: glm.Mat4 = identityMat4;
-pub var view: glm.Mat4 = identityMat4;
-pub var camera: ?*Camera = null;
-
-/// Holds some universal uniforms,
-/// keeps space for custom defined ones
-pub const Uniforms = struct {
-    project: bool,
-    view: bool,
-    model: ?glm.Mat4,
-};
-
-pub const Shader = struct {
-    program: gl.Program,
-
-    pub fn create(
-        vertPath: []const u8,
-        fragPath: []const u8,
-    ) !Shader {
-        const program = try compileProgram(vertPath, fragPath);
-
-        return Shader{
-            .program = program,
-        };
-    }
-
-    pub fn use(self: *Shader) void {
-        self.program.use();
-    }
-
-    // Uniforms are held in Meshes, which isn't ideal because
-    // we're then resetting uniforms with the same universal
-    // values multiple times per object rather than per shader
-    pub fn setUniforms(self: *Shader, uniforms: Uniforms) void {
-        self.program.use();
-        if (uniforms.project) {
-            self.program.uniformMatrix4(
-                self.program.uniformLocation("projection"),
-                false,
-                @ptrCast(&projection.vals),
-            );
-        }
-
-        if (uniforms.view) {
-            self.program.uniformMatrix4(
-                self.program.uniformLocation("view"),
-                false,
-                @ptrCast(&view.vals),
-            );
-        }
-        if (uniforms.model) |model| {
-            self.program.uniformMatrix4(
-                self.program.uniformLocation("model"),
-                false,
-                @ptrCast(&model.vals),
-            );
-        }
-    }
-
-    // Nice abstraction, but I wonder if it's worthwhile storing
-    // Uniform locations for faster setting.
-    pub fn uniformVec3(self: *Shader, name: [:0]const u8, vec: glm.Vec3) void {
-        self.use();
-        self.program.uniform3f(
-            self.program.uniformLocation(name),
-            vec.vals[0],
-            vec.vals[1],
-            vec.vals[2],
-        );
-    }
-};
-
-pub const Vertex = struct {
-    pos: glm.Vec3,
-    norm: glm.Vec3,
-    tex: glm.Vec2,
-};
-
 pub const Mesh = struct {
     vao: gl.VertexArray,
     vbo: gl.Buffer,
@@ -259,9 +226,9 @@ pub const Mesh = struct {
     indices: []u32,
 
     shader: Shader,
-    uniforms: Uniforms,
+    uniforms: []mesh.Uniform,
 
-    pub fn init(path: []const u8, shader: Shader, uniforms: Uniforms) !Mesh {
+    pub fn init(path: []const u8, shader: Shader, uniforms: []const mesh.Uniform) !Mesh {
         const allocator = std.heap.page_allocator;
         const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .unlimited);
         defer allocator.free(cubeData);
@@ -314,7 +281,7 @@ pub const Mesh = struct {
             }
         }
 
-        var mesh = Mesh{
+        var new_mesh = Mesh{
             .vao = gl.genVertexArray(),
             .vbo = gl.genBuffer(),
             .ebo = gl.genBuffer(),
@@ -323,25 +290,26 @@ pub const Mesh = struct {
             .indices = indices,
 
             .shader = shader,
-            .uniforms = uniforms,
+            .uniforms = try allocator.dupe(mesh.Uniform, uniforms),
         };
-        mesh.bind();
+        new_mesh.bind();
 
-        mesh.vbo.data(Vertex, mesh.vertices, .static_draw);
-        mesh.ebo.data(u32, mesh.indices, .static_draw);
+        new_mesh.vbo.data(Vertex, new_mesh.vertices, .static_draw);
+        new_mesh.ebo.data(u32, new_mesh.indices, .static_draw);
 
         gl.vertexAttribPointer(0, 3, .float, false, @sizeOf(Vertex), @offsetOf(Vertex, "pos"));
         gl.enableVertexAttribArray(0);
         gl.vertexAttribPointer(1, 3, .float, false, @sizeOf(Vertex), @offsetOf(Vertex, "norm"));
         gl.enableVertexAttribArray(1);
 
-        return mesh;
+        return new_mesh;
     }
     pub fn deinit(self: *Mesh) void {
         // Free allocated memory
         const allocator = std.heap.page_allocator;
         allocator.free(self.vertices);
         allocator.free(self.indices);
+        allocator.free(self.uniforms);
 
         // Delete OpenGL objects
         gl.deleteVertexArray(self.vao);

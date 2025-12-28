@@ -22,42 +22,52 @@ fn appStart() void {
         "shaders/object.frag",
     ) catch unreachable;
 
-    const defaultUniform = tg.Uniforms{
-        .project = true,
-        .view = true,
-        .model = tg.identityMat4,
-    };
-
-    lightMesh = tg.Mesh.init(
-        "cube.obj",
-        lightShader,
-        defaultUniform,
-    ) catch unreachable;
-    const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
-    lightMesh.uniforms.model = lightModel;
-
-    cubeMesh = tg.Mesh.init(
-        "cube.obj",
-        cubeShader,
-        defaultUniform,
-    ) catch unreachable;
-    const model = glm.translation(glm.vec3(0.0, 0.0, 0.0)).matmul(glm.rotation(
-        pi / 12.0,
-        glm.vec3(1.0, 0.3, 0.5),
-    ));
-    cubeMesh.uniforms.model = model;
-
-    drumMesh = tg.Mesh.init(
-        "drum.obj",
-        cubeShader,
-        defaultUniform,
-    ) catch unreachable;
-    const drumModel = glm.translation(glm.vec3(4.0, 0.0, 0.0));
-    drumMesh.uniforms.model = drumModel;
-
     camera.yaw = -0.5;
     camera.pos = glm.vec3(0.0, 0.0, 5.0);
     camera.setMain();
+    const view = camera.getView();
+
+    const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
+    lightMesh = tg.Mesh.init(
+        "cube.obj",
+        lightShader,
+        &[_]tg.mesh.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
+            .{ .name = "view", .value = .{ .mat4 = view } },
+            .{ .name = "model", .value = .{ .mat4 = lightModel } },
+        },
+    ) catch unreachable;
+
+    const cubeModel = glm.translation(glm.vec3(0.0, 0.0, 0.0)).matmul(glm.rotation(
+        pi / 12.0,
+        glm.vec3(1.0, 0.3, 0.5),
+    ));
+    cubeMesh = tg.Mesh.init(
+        "cube.obj",
+        cubeShader,
+        &[_]tg.mesh.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
+            .{ .name = "view", .value = .{ .mat4 = view } },
+            .{ .name = "model", .value = .{ .mat4 = cubeModel } },
+            .{ .name = "objectColor", .value = .{ .vec3 = glm.vec3(1.0, 0.5, 0.2) } },
+            .{ .name = "lightColor", .value = .{ .vec3 = glm.vec3(1.0, 1.0, 1.0) } },
+            .{ .name = "lightPos", .value = .{ .vec3 = glm.vec3(0.0, 4.0, -4.0) } },
+        },
+    ) catch unreachable;
+
+    const drumModel = glm.translation(glm.vec3(4.0, 0.0, 0.0));
+    drumMesh = tg.Mesh.init(
+        "drum.obj",
+        cubeShader,
+        &[_]tg.mesh.Uniform{
+            .{ .name = "projection", .value = .{ .mat4 = tg.projection } },
+            .{ .name = "view", .value = .{ .mat4 = view } },
+            .{ .name = "model", .value = .{ .mat4 = drumModel } },
+            .{ .name = "objectColor", .value = .{ .vec3 = glm.vec3(0.2, 0.5, 1.0) } },
+            .{ .name = "lightColor", .value = .{ .vec3 = glm.vec3(1.0, 1.0, 1.0) } },
+            .{ .name = "lightPos", .value = .{ .vec3 = glm.vec3(0.0, 4.0, -4.0) } },
+        },
+    ) catch unreachable;
 }
 
 const glm = tg.glm;
@@ -86,18 +96,9 @@ fn appProcess() void {
     lightMesh.bind();
     lightMesh.draw();
 
-    // Find a better way to set these?
-    cubeMesh.shader.uniformVec3("objectColor", glm.vec3(1.0, 0.5, 0.2));
-    cubeMesh.shader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
-    cubeMesh.shader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
-
     // Drawing main cube
     cubeMesh.bind();
     cubeMesh.draw();
-
-    drumMesh.shader.uniformVec3("objectColor", glm.vec3(0.2, 0.5, 1.0));
-    drumMesh.shader.uniformVec3("lightColor", glm.vec3(1.0, 1.0, 1.0));
-    drumMesh.shader.uniformVec3("lightPos", glm.vec3(0.0, 4.0, -4.0));
 
     // Drawing barrel
     drumMesh.bind();
@@ -109,8 +110,8 @@ var app: tg.App = undefined;
 pub fn main() !void {
     app = try tg.App.init(
         "Taugine",
-        950,
-        750,
+        960,
+        760,
         appStart,
         appProcess,
     );
