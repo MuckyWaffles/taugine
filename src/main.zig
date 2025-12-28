@@ -107,8 +107,7 @@ fn appProcess() void {
 var app: tg.App = undefined;
 
 pub fn main() !void {
-    app = try tg.App.init("Taugine", 960, 760, appStart, appProcess);
-    defer app.deinit();
-
-    try app.run();
+    app = tg.App.init("Taugine", 960, 760, appStart, appProcess);
+    app.run();
+    app.deinit();
 }

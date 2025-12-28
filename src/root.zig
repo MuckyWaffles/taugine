@@ -36,7 +36,7 @@ pub const App = struct {
         height: u16,
         appStart: *const fn () void,
         appProcess: *const fn () void,
-    ) !App {
+    ) App {
         // Init SDL3
         const initFlags = sdl.InitFlags{ .video = true };
         sdl.init(initFlags) catch |err| {
@@ -46,9 +46,9 @@ pub const App = struct {
         // Setting OpenGL attributes
         sdlgl.setAttribute(
             .context_profile_mask,
-            c.SDL_GL_CONTEXT_PROFILE_CORE,
+            @intFromEnum(sdlgl.Profile.core),
         ) catch |err| {
-            std.debug.print("Failed to initialize OpenGL! {}\n", .{err});
+            std.debug.print("Failed to set OpenGL attribute! {}\n", .{err});
         };
 
         // Enabling anti-aliasing
@@ -61,13 +61,22 @@ pub const App = struct {
 
         // Setup window
         const windowFlags = sdl.video.Window.Flags{ .open_gl = true };
-        const window = try sdl.video.Window.init(title, width, height, windowFlags);
+        const window = sdl.video.Window.init(
+            title,
+            width,
+            height,
+            windowFlags,
+        ) catch unreachable;
 
         // Init OpenGL context
-        const context = try sdlgl.Context.init(window);
-        try context.makeCurrent(window);
+        const context = sdlgl.Context.init(window) catch unreachable;
+        context.makeCurrent(window) catch |err| {
+            std.debug.print("Failed to make window current! {}\n", .{err});
+        };
 
-        try gl.loadExtensions(void, getProcAddressWrapper);
+        gl.loadExtensions(void, getProcAddressWrapper) catch |err| {
+            std.debug.print("Failed to load OpenGL extensions! {}\n", .{err});
+        };
 
         gl.enable(.multisample);
         gl.enable(.depth_test);
@@ -109,7 +118,7 @@ pub const App = struct {
     }
 
     /// Run given appStart and appProcess in a handled loop
-    pub fn run(self: *App) !void {
+    pub fn run(self: *App) void {
         self.appStart();
 
         while (!Input.exitRequested) {
@@ -123,7 +132,9 @@ pub const App = struct {
 
             self.appProcess();
 
-            try sdlgl.swapWindow(self.window);
+            sdlgl.swapWindow(self.window) catch |err| {
+                std.debug.print("Failed to update window! {}\n", .{err});
+            };
 
             Input.get(); // Updating inputs
         }

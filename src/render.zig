@@ -192,6 +192,7 @@ pub const Mesh = struct {
         self.ebo.bind(.element_array_buffer);
     }
     pub fn draw(self: *Mesh) void {
+        self.bind();
         self.shader.setUniforms(self.uniforms);
         gl.drawElements(.triangles, self.indices.len, .unsigned_int, 0);
     }
