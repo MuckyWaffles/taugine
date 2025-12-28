@@ -121,9 +121,13 @@ pub const App = struct {
     pub fn run(self: *App) void {
         self.appStart();
 
-        while (!Input.exitRequested) {
-            // Update logic.
+        const target_frame_time: i64 = @as(i64, @intFromFloat(1.0 / 75.0 * std.time.ns_per_s));
 
+        var timer = std.time.Timer.start() catch unreachable;
+        while (!Input.exitRequested) {
+            timer.reset();
+
+            // Update logic.
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
             gl.clear(.{ .depth = true, .color = true });
 
@@ -135,6 +139,12 @@ pub const App = struct {
             sdlgl.swapWindow(self.window) catch |err| {
                 std.debug.print("Failed to update window! {}\n", .{err});
             };
+
+            const frame_time: i64 = @intCast(timer.read());
+            const wait_time = target_frame_time - frame_time;
+            std.debug.print("{} - {}\n", .{ target_frame_time, frame_time });
+            var timespec: std.posix.timespec = .{ .sec = 0, .nsec = @intCast(wait_time) };
+            _ = std.posix.system.nanosleep(&timespec, &timespec);
 
             Input.get(); // Updating inputs
         }
