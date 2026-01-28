@@ -31,29 +31,6 @@ pub fn build(b: *std.Build) void {
         .log_message_stack_size = 1024,
         .main = false,
         .renderer_debug_text_stack_size = 1024,
-
-        // Options passed directly to https://github.com/castholm/SDL (SDL3 C Bindings):
-        // .c_sdl_preferred_linkage = .static,
-        // .c_sdl_strip = false,
-        // .c_sdl_sanitize_c = .off,
-        // .c_sdl_lto = .none,
-        // .c_sdl_emscripten_pthreads = false,
-        // .c_sdl_install_build_config_h = false,
-
-        // Options if `ext_image` is enabled:
-        // .image_enable_bmp = true,
-        // .image_enable_gif = true,
-        // .image_enable_jpg = true,
-        // .image_enable_lbm = true,
-        // .image_enable_pcx = true,
-        // .image_enable_png = true,
-        // .image_enable_pnm = true,
-        // .image_enable_qoi = true,
-        // .image_enable_svg = true,
-        // .image_enable_tga = true,
-        // .image_enable_xcf = true,
-        // .image_enable_xpm = true,
-        // .image_enable_xv = true,
     });
 
     // This creates a module, which represents a collection of source files alongside
@@ -107,7 +84,7 @@ pub fn build(b: *std.Build) void {
             // b.createModule defines a new module just like b.addModule but,
             // unlike b.addModule, it does not expose the module to consumers of
             // this package, which is why in this case we don't have to give it a name.
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("example/main.zig"),
             // Target and optimization levels must be explicitly wired in when
             // defining an executable or library (in the root module), and you
             // can also hardcode a specific target for an executable or library
