@@ -26,7 +26,7 @@ pub const App = struct {
     /// Reference to user's main camera
     mainCamera: ?*Camera = null,
 
-    appStart: *const fn () void,
+    appStart: *const fn (std.Io) void,
     appProcess: *const fn () void,
 
     /// Initialize app
@@ -34,7 +34,7 @@ pub const App = struct {
         title: [:0]const u8,
         width: u16,
         height: u16,
-        appStart: *const fn () void,
+        appStart: *const fn (std.Io) void,
         appProcess: *const fn () void,
     ) App {
         // Init SDL3
@@ -118,14 +118,15 @@ pub const App = struct {
     }
 
     /// Run given appStart and appProcess in a handled loop
-    pub fn run(self: *App) void {
-        self.appStart();
+    pub fn run(self: *App, io: std.Io) void {
+        self.appStart(io);
 
         const target_frame_time: i64 = @as(i64, @intFromFloat(1.0 / 75.0 * std.time.ns_per_s));
 
-        var timer = std.time.Timer.start() catch unreachable;
         while (!Input.exitRequested) {
-            timer.reset();
+            var ts: std.posix.timespec = undefined;
+            _ = std.posix.system.clock_gettime(.MONOTONIC, &ts);
+            const start_time = ts.nsec;
 
             // Update logic.
             gl.clearColor(0.8, 0.2, 0.6, 1.0);
@@ -140,8 +141,12 @@ pub const App = struct {
                 std.debug.print("Failed to update window! {}\n", .{err});
             };
 
-            const frame_time: i64 = @intCast(timer.read());
+            _ = std.posix.system.clock_gettime(.MONOTONIC, &ts);
+            const end_time = ts.nsec;
+
+            const frame_time = end_time - start_time;
             const wait_time = target_frame_time - frame_time;
+
             std.debug.print("{} - {}\n", .{ target_frame_time, frame_time });
             var timespec: std.posix.timespec = .{ .sec = 0, .nsec = @intCast(wait_time) };
             _ = std.posix.system.nanosleep(&timespec, &timespec);

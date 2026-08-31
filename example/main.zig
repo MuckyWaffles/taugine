@@ -11,13 +11,15 @@ var lightShader: tg.render.Shader = undefined;
 var drumMesh: tg.render.Mesh = undefined;
 var drumShader: tg.render.Shader = undefined;
 
-fn appStart() void {
+fn appStart(io: std.Io) void {
     lightShader = tg.render.Shader.create(
+        io,
         "shaders/object.vert",
         "shaders/basic.frag",
     ) catch unreachable;
 
     cubeShader = tg.render.Shader.create(
+        io,
         "shaders/object.vert",
         "shaders/object.frag",
     ) catch unreachable;
@@ -28,6 +30,7 @@ fn appStart() void {
 
     const lightModel = glm.translation(glm.vec3(0.0, 4.0, -4.0));
     lightMesh = tg.render.Mesh.init(
+        io,
         "cube.obj",
         lightShader,
         &[_]tg.render.Uniform{
@@ -42,6 +45,7 @@ fn appStart() void {
         glm.vec3(1.0, 0.3, 0.5),
     ));
     cubeMesh = tg.render.Mesh.init(
+        io,
         "cube.obj",
         cubeShader,
         &[_]tg.render.Uniform{
@@ -56,6 +60,7 @@ fn appStart() void {
 
     const drumModel = glm.translation(glm.vec3(4.0, 0.0, 0.0));
     drumMesh = tg.render.Mesh.init(
+        io,
         "drum.obj",
         cubeShader,
         &[_]tg.render.Uniform{
@@ -106,8 +111,8 @@ fn appProcess() void {
 
 var app: tg.App = undefined;
 
-pub fn main() !void {
+pub fn main(init: std.process.Init) !void {
     app = tg.App.init("Taugine", 960, 760, appStart, appProcess);
-    app.run();
+    app.run(init.io);
     app.deinit();
 }

@@ -58,10 +58,11 @@ pub const Shader = struct {
     program: gl.Program,
 
     pub fn create(
+        io: std.Io,
         vertPath: []const u8,
         fragPath: []const u8,
     ) !Shader {
-        const program = try compileProgram(vertPath, fragPath);
+        const program = try compileProgram(io, vertPath, fragPath);
 
         return Shader{
             .program = program,
@@ -99,11 +100,11 @@ pub const Mesh = struct {
     shader: Shader,
     uniforms: []Uniform,
 
-    pub fn init(path: []const u8, shader: Shader, uniforms: []const Uniform) !Mesh {
+    pub fn init(io: std.Io, path: []const u8, shader: Shader, uniforms: []const Uniform) !Mesh {
         const allocator = std.heap.page_allocator;
-        const cubeData = try std.fs.cwd().readFileAlloc(path, allocator, .unlimited);
-        defer allocator.free(cubeData);
-        const data = try obj.parseObj(allocator, cubeData);
+        const cube_data = try std.Io.Dir.cwd().readFileAlloc(io, path, allocator, .unlimited);
+        defer allocator.free(cube_data);
+        const data = try obj.parseObj(allocator, cube_data);
 
         const quads = data.meshes[0].indices;
         const quad_count = quads.len / 4;
@@ -198,14 +199,14 @@ pub const Mesh = struct {
     }
 };
 
-pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
+pub fn compileProgram(io: std.Io, vertPath: []const u8, fragPath: []const u8) !gl.Program {
     const allocator = std.heap.page_allocator;
 
-    var vertCode = try std.fs.cwd().readFileAlloc(vertPath, allocator, .limited(1024));
-    defer allocator.free(vertCode);
+    var vert_code = try std.Io.Dir.cwd().readFileAlloc(io, vertPath, allocator, .limited(1024));
+    defer allocator.free(vert_code);
 
     const vertexShader = gl.createShader(.vertex);
-    vertexShader.source(1, &vertCode);
+    vertexShader.source(1, &vert_code);
     vertexShader.compile();
     if (vertexShader.get(.compile_status) == 0) {
         const err = try vertexShader.getCompileLog(allocator);
@@ -213,11 +214,11 @@ pub fn compileProgram(vertPath: []const u8, fragPath: []const u8) !gl.Program {
     }
     defer vertexShader.delete();
 
-    var fragCode = try std.fs.cwd().readFileAlloc(fragPath, allocator, .limited(1024));
-    defer allocator.free(fragCode);
+    var frag_code = try std.Io.Dir.cwd().readFileAlloc(io, fragPath, allocator, .limited(1024));
+    defer allocator.free(frag_code);
 
     const fragmentShader = gl.createShader(.fragment);
-    fragmentShader.source(1, &fragCode);
+    fragmentShader.source(1, &frag_code);
     fragmentShader.compile();
     if (fragmentShader.get(.compile_status) == 0) {
         const err = try vertexShader.getCompileLog(allocator);

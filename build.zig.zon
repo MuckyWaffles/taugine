@@ -25,7 +25,7 @@
     .fingerprint = 0x508074ed67f92709, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.16.0-dev.1657+985a3565c",
+    .minimum_zig_version = "0.16.0",
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
@@ -33,16 +33,16 @@
     // internet connectivity.
     .dependencies = .{
         .sdl3 = .{
-            .url = "git+https://github.com/MuckyWaffles/zig-sdl3?ref=master#365099b2e35091f3d7d778194e0c577eb368597f",
-            .hash = "sdl3-0.1.5-NmT1Q6gSJgB_wdGO1ny6gvWXVNtPOSLXNUPRtJgS7p_K",
+            .url = "git+https://codeberg.org/7Games/zig-sdl3.git#69cf1fba30b39fe0a140fc2139d403692e650d16",
+            .hash = "sdl3-0.2.2-NmT1Q0ZUKgCxQv6PXwCIbr_MKILJYAgDWv1YhClnS4XH",
         },
         .zgl = .{
-            .url = "https://github.com/ziglibs/zgl/archive/caf811fb8b778184128772e57dfcb96be2351c43.tar.gz",
-            .hash = "zgl-1.1.0-p_NpAJJECgDSDHYHH_W6rX0snxnFoJ4JZZ0FV5_vqjjy",
+            .url = "git+https://github.com/ziglibs/zgl.git#a73479a8036ebf806759f8dd7e6d60abc631da1d",
+            .hash = "zgl-1.1.0-p_NpAD9FCgAY_XDO_EXxSGJ5-n9b3deO0V-9z9HJKYTQ",
         },
         .obj = .{
-            .url = "git+https://github.com/chip2n/zig-obj.git#47410383c81d24454e370ffadc0980af7abea522",
-            .hash = "obj-3.0.2-v8OfitvLAADxUf6oMHCiWxjJILklY-IMKXlwX-Pv8rKu",
+            .url = "git+https://github.com/chip2n/zig-obj#6070356009e761a4aef82256f1f431037ae97426",
+            .hash = "obj-3.0.2-v8OfivnLAAAgz1LaweX7sbe5ffod4VglAnYFCyjcPr1m",
         },
     },
     .paths = .{
